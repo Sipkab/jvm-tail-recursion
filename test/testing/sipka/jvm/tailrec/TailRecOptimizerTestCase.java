@@ -21,6 +21,8 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 		}
 		byte[] cbytes = getResourceBytes(c.getClassLoader(), cname.replace(".", "/") + ".class");
 		byte[] optimizedbytes = TailRecursionOptimizer.optimizeMethods(cbytes);
+		//optimize the optimized, and check that they equal
+		assertIdentityEquals(optimizedbytes, TailRecursionOptimizer.optimizeMethods(optimizedbytes));
 		return definingClassLoader.defineUserClass(c.getName(), optimizedbytes);
 	}
 

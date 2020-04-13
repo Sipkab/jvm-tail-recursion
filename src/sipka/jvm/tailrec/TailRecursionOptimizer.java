@@ -51,12 +51,30 @@ public class TailRecursionOptimizer {
 
 	private static final int ASM_API = Opcodes.ASM8;
 
+	/**
+	 * Optimizes out the possible tail recursive calls in the argument Java class bytecode.
+	 * 
+	 * @param classbytes
+	 *            The Java class bytecode to optimize.
+	 * @return The optimized bytecode. The return value will equal by identity (<code>==</code>) if there were no
+	 *             optimizations performed. The result is <code>null</code> if and only if the argument is
+	 *             <code>null</code>.
+	 */
 	public static byte[] optimizeMethods(byte[] classbytes) {
+		if (classbytes == null) {
+			return null;
+		}
 		ClassReader cr = new ClassReader(classbytes);
 		ClassNode cn = new ClassNode(ASM_API);
 		cr.accept(cn, ClassReader.EXPAND_FRAMES);
+		boolean optimized = false;
 		for (MethodNode mn : cn.methods) {
-			optimizeMethod(cn.name, ((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE), mn);
+			boolean methodoptimized = optimizeMethod(cn.name,
+					((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE), mn);
+			optimized = optimized || methodoptimized;
+		}
+		if (!optimized) {
+			return classbytes;
 		}
 
 		ClassWriter cw = new ClassWriter(cr, 0);
@@ -789,152 +807,154 @@ public class TailRecursionOptimizer {
 		return firstlabel;
 	}
 
-	private static void optimizeMethod(String methodowner, boolean owneritf, MethodNode mn) {
-		LabelNode gotolabelnode = null;
+	private static boolean optimizeMethod(String methodowner, boolean owneritf, MethodNode mn) {
 		boolean methodoptimizable = isOptimizableMethod(mn);
-		System.out.println(mn.name + " - " + mn.desc + " - " + methodoptimizable);
-		if (methodoptimizable) {
-			Type methodtype = Type.getMethodType(mn.desc);
-			boolean staticcall = ((mn.access & Opcodes.ACC_STATIC) == Opcodes.ACC_STATIC);
-			int allsize = staticcall ? 0 : 1;
-			Type[] argtypes = methodtype.getArgumentTypes();
-			for (Type argtype : argtypes) {
-				allsize += argtype.getSize();
+		if (!methodoptimizable) {
+			return false;
+		}
+
+		LabelNode gotolabelnode = null;
+		Type methodtype = Type.getMethodType(mn.desc);
+		boolean staticcall = ((mn.access & Opcodes.ACC_STATIC) == Opcodes.ACC_STATIC);
+		int allsize = staticcall ? 0 : 1;
+		Type[] argtypes = methodtype.getArgumentTypes();
+		for (Type argtype : argtypes) {
+			allsize += argtype.getSize();
+		}
+
+		//the tail-recursion doesnt work if the method call is in a try-catch, as the exception would need the stack trace, and 
+		//    basically anything can happen in the catch block. This would semantically violate the optimization.
+		Set<AbstractInsnNode> trycatchskipinstructions;
+		if (mn.tryCatchBlocks.isEmpty()) {
+			trycatchskipinstructions = Collections.emptySet();
+		} else {
+			trycatchskipinstructions = new HashSet<>();
+			for (TryCatchBlockNode tcb : mn.tryCatchBlocks) {
+				collectTryCatchBodyInstructions(trycatchskipinstructions, tcb);
 			}
+		}
 
-			//the tail-recursion doesnt work if the method call is in a try-catch, as the exception would need the stack trace, and 
-			//    basically anything can happen in the catch block. This would semantically violate the optimization.
-			Set<AbstractInsnNode> trycatchskipinstructions;
-			if (mn.tryCatchBlocks.isEmpty()) {
-				trycatchskipinstructions = Collections.emptySet();
-			} else {
-				trycatchskipinstructions = new HashSet<>();
-				for (TryCatchBlockNode tcb : mn.tryCatchBlocks) {
-					collectTryCatchBodyInstructions(trycatchskipinstructions, tcb);
-				}
+		Object returntypeframetype;
+		Type methodreturntype = methodtype.getReturnType();
+		switch (methodreturntype.getSort()) {
+			case Type.VOID: {
+				returntypeframetype = null;
+				break;
 			}
-
-			Object returntypeframetype;
-			Type methodreturntype = methodtype.getReturnType();
-			switch (methodreturntype.getSort()) {
-				case Type.VOID: {
-					returntypeframetype = null;
-					break;
-				}
-				case Type.CHAR:
-				case Type.BOOLEAN:
-				case Type.BYTE:
-				case Type.SHORT:
-				case Type.INT: {
-					returntypeframetype = Opcodes.INTEGER;
-					break;
-				}
-				case Type.LONG: {
-					returntypeframetype = Opcodes.LONG;
-					break;
-				}
-				case Type.FLOAT: {
-					returntypeframetype = Opcodes.FLOAT;
-					break;
-				}
-				case Type.DOUBLE: {
-					returntypeframetype = Opcodes.DOUBLE;
-					break;
-				}
-				case Type.OBJECT: {
-					returntypeframetype = methodreturntype.getInternalName();
-					break;
-				}
-				default: {
-					throw new AssertionError("Unknown sort: " + methodreturntype.getSort());
-				}
+			case Type.CHAR:
+			case Type.BOOLEAN:
+			case Type.BYTE:
+			case Type.SHORT:
+			case Type.INT: {
+				returntypeframetype = Opcodes.INTEGER;
+				break;
 			}
-			AbstractInsnNode ins = mn.instructions.getFirst();
-			for (; ins != null; ins = ins.getNext()) {
-				if (trycatchskipinstructions.contains(ins)) {
-					continue;
-				}
-				int instype = ins.getType();
-				if (instype == AbstractInsnNode.METHOD_INSN) {
-					MethodInsnNode mins = (MethodInsnNode) ins;
-					if (methodowner.equals(mins.owner) && mn.name.equals(mins.name) && mn.desc.equals(mins.desc)
-							&& owneritf == mins.itf) {
-						boolean optimizablecall = isTailOptimizable(mins, returntypeframetype);
-						if (optimizablecall) {
-							if (gotolabelnode == null) {
-								gotolabelnode = insertStartGotoLabel(mn);
-							}
-							JumpInsnNode gotojumpnode = new JumpInsnNode(Opcodes.GOTO, gotolabelnode);
+			case Type.LONG: {
+				returntypeframetype = Opcodes.LONG;
+				break;
+			}
+			case Type.FLOAT: {
+				returntypeframetype = Opcodes.FLOAT;
+				break;
+			}
+			case Type.DOUBLE: {
+				returntypeframetype = Opcodes.DOUBLE;
+				break;
+			}
+			case Type.ARRAY:
+			case Type.OBJECT: {
+				returntypeframetype = methodreturntype.getInternalName();
+				break;
+			}
+			default: {
+				throw new AssertionError("Unknown sort: " + methodreturntype.getSort());
+			}
+		}
 
-							//the return instruction is directly after the method call, no frame changes or jumps present
-							mn.instructions.insertBefore(mins, gotojumpnode);
-							//remove the method call instruction
-							mn.instructions.remove(mins);
+		for (AbstractInsnNode ins = mn.instructions.getFirst(); ins != null; ins = ins.getNext()) {
+			if (trycatchskipinstructions.contains(ins)) {
+				continue;
+			}
+			int instype = ins.getType();
+			if (instype == AbstractInsnNode.METHOD_INSN) {
+				MethodInsnNode mins = (MethodInsnNode) ins;
+				if (methodowner.equals(mins.owner) && mn.name.equals(mins.name) && mn.desc.equals(mins.desc)
+						&& owneritf == mins.itf) {
+					boolean optimizablecall = isTailOptimizable(mins, returntypeframetype);
+					if (optimizablecall) {
+						if (gotolabelnode == null) {
+							gotolabelnode = insertStartGotoLabel(mn);
+						}
+						JumpInsnNode gotojumpnode = new JumpInsnNode(Opcodes.GOTO, gotolabelnode);
 
-							AbstractInsnNode nextframe = null;
-							remover:
-							for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
-								int ntype = n.getType();
-								switch (ntype) {
-									case AbstractInsnNode.FRAME: {
-										nextframe = n;
-										break remover;
-									}
-									case AbstractInsnNode.LABEL:
-									case AbstractInsnNode.LINE: {
-										break;
-									}
-									case AbstractInsnNode.INSN:
-									case AbstractInsnNode.INT_INSN:
-									case AbstractInsnNode.VAR_INSN:
-									case AbstractInsnNode.TYPE_INSN:
-									case AbstractInsnNode.FIELD_INSN:
-									case AbstractInsnNode.METHOD_INSN:
-									case AbstractInsnNode.INVOKE_DYNAMIC_INSN:
-									case AbstractInsnNode.JUMP_INSN:
-									case AbstractInsnNode.LDC_INSN:
-									case AbstractInsnNode.IINC_INSN:
-									case AbstractInsnNode.TABLESWITCH_INSN:
-									case AbstractInsnNode.LOOKUPSWITCH_INSN:
-									case AbstractInsnNode.MULTIANEWARRAY_INSN: {
-										AbstractInsnNode next = n.getNext();
-										mn.instructions.remove(n);
-										n = next;
-										continue remover;
-									}
-									default: {
-										break;
-									}
+						//the return instruction is directly after the method call, no frame changes or jumps present
+						mn.instructions.insertBefore(mins, gotojumpnode);
+						//remove the method call instruction
+						mn.instructions.remove(mins);
+
+						AbstractInsnNode nextframe = null;
+						remover:
+						for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
+							int ntype = n.getType();
+							switch (ntype) {
+								case AbstractInsnNode.FRAME: {
+									nextframe = n;
+									break remover;
 								}
-								n = n.getNext();
-							}
-							if (nextframe == null) {
-								//remove every next node after the goto, as there are no more instructions
-								for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
+								case AbstractInsnNode.LABEL:
+								case AbstractInsnNode.LINE: {
+									break;
+								}
+								case AbstractInsnNode.INSN:
+								case AbstractInsnNode.INT_INSN:
+								case AbstractInsnNode.VAR_INSN:
+								case AbstractInsnNode.TYPE_INSN:
+								case AbstractInsnNode.FIELD_INSN:
+								case AbstractInsnNode.METHOD_INSN:
+								case AbstractInsnNode.INVOKE_DYNAMIC_INSN:
+								case AbstractInsnNode.JUMP_INSN:
+								case AbstractInsnNode.LDC_INSN:
+								case AbstractInsnNode.IINC_INSN:
+								case AbstractInsnNode.TABLESWITCH_INSN:
+								case AbstractInsnNode.LOOKUPSWITCH_INSN:
+								case AbstractInsnNode.MULTIANEWARRAY_INSN: {
 									AbstractInsnNode next = n.getNext();
-									if (isInstructionNodeType(n.getType())) {
-										mn.instructions.remove(n);
-									}
+									mn.instructions.remove(n);
 									n = next;
+									continue remover;
+								}
+								default: {
+									break;
 								}
 							}
-
-							int cvar = allsize;
-							for (int i = argtypes.length - 1; i >= 0; i--) {
-								Type argtype = argtypes[i];
-
-								cvar -= argtype.getSize();
-								mn.instructions.insertBefore(gotojumpnode,
-										new VarInsnNode(argtype.getOpcode(Opcodes.ISTORE), cvar));
-							}
-							if (!staticcall) {
-								// replace the this variable as well in case if the method is getting called
-								// on a different instance
-								mn.instructions.insertBefore(gotojumpnode, new VarInsnNode(Opcodes.ASTORE, 0));
+							n = n.getNext();
+						}
+						if (nextframe == null) {
+							//remove every next node after the goto, as there are no more instructions
+							for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
+								AbstractInsnNode next = n.getNext();
+								if (isInstructionNodeType(n.getType())) {
+									mn.instructions.remove(n);
+								}
+								n = next;
 							}
 						}
 
+						int cvar = allsize;
+						for (int i = argtypes.length - 1; i >= 0; i--) {
+							Type argtype = argtypes[i];
+
+							cvar -= argtype.getSize();
+							mn.instructions.insertBefore(gotojumpnode,
+									new VarInsnNode(argtype.getOpcode(Opcodes.ISTORE), cvar));
+						}
+						if (!staticcall) {
+							// replace the this variable as well in case if the method is getting called
+							// on a different instance
+							mn.instructions.insertBefore(gotojumpnode, new VarInsnNode(Opcodes.ASTORE, 0));
+						}
 					}
+
 				}
 			}
 		}
@@ -982,7 +1002,9 @@ public class TailRecursionOptimizer {
 					}
 				}
 			}
+			return true;
 		}
+		return false;
 	}
 
 	private static boolean isLabelsNextToEachOther(LabelNode first, LabelNode second) {

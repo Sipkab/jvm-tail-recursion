@@ -3,10 +3,28 @@ static(VERSION_saker.build) = nest.dependency.resolve(
 	Filters: nest.dependency.filter.kind([]),
 )[Bundles][0][BundleIdentifier][VersionNumber]
 
+static(VERSION_sipka.cmdline) = "0.8.0"
+
 compile(
 	out javac
 ) {
-	$javac = saker.java.compile(src)
+	$javac = saker.java.compile(
+		src,
+		AnnotationProcessors: {
+			Processor: saker.java.processor.bundle(
+				Bundle: "sipka.cmdline-processor-v{ static(VERSION_sipka.cmdline) }",
+				Class: sipka.cmdline.processor.CommandLineProcessor,
+				Aggregating: false,				
+			),
+			SuppressWarnings: [ 
+				LastRoundGeneration,
+			],
+		},
+		ClassPath: [
+			saker.java.classpath.bundle("sipka.cmdline-api-v{ static(VERSION_sipka.cmdline) }"),
+			saker.java.classpath.bundle("sipka.cmdline-runtime-v{ static(VERSION_sipka.cmdline) }"),
+		],
+	)
 }
 
 export(
@@ -19,8 +37,23 @@ export(
 			{
 				Directory: $compile[javac][ClassDirectory],
 				Resources: **,
+			},
+			{
+				Files: LICENSE,
+				TargetDirectory: META-INF,
 			}
-		]
+		],
+		Includes: [
+			{
+				Archive: nest.bundle.download("sipka.cmdline-runtime-v{ static(VERSION_sipka.cmdline) }")[BundlePaths][0],
+				Resources: sipka/cmdline/runtime/**/*.class,
+			},
+		],
+		Manifest: {
+			MainAttributes: {
+				Main-Class: sipka.jvm.tailrec.Main
+			}
+		}
 	)
 }
 
