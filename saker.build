@@ -1,0 +1,65 @@
+static(VERSION_saker.build) = nest.dependency.resolve(
+	saker.build,
+	Filters: nest.dependency.filter.kind([]),
+)[Bundles][0][BundleIdentifier][VersionNumber]
+
+compile(
+	out javac
+) {
+	$javac = saker.java.compile(src)
+}
+
+export(
+	in compile = include(compile),
+	
+	out jar,
+){
+	$jar = saker.jar.create(
+		Resources: [
+			{
+				Directory: $compile[javac][ClassDirectory],
+				Resources: **,
+			}
+		]
+	)
+}
+
+test(){
+	$compile = include(compile)
+	$testcompile = saker.java.compile(
+		SourceDirectories: test,
+		ClassPath: [
+			$compile[javac],
+			saker.java.classpath.bundle([
+				"saker.build-test-runner-v{ static(VERSION_saker.build) }",
+				"saker.build-test-utils-v{ static(VERSION_saker.build) }",
+			]),
+		],
+	)
+	
+	saker.java.test(
+		TestRunnerClassPath: [
+			saker.java.classpath.bundle("saker.build-test-runner-v{ static(VERSION_saker.build) }"),
+		],
+		ClassPath: $compile[javac],
+		TestInvokerClass: testing.saker.SakerJavaTestingInvoker,
+		TestClassPath: [
+			$testcompile[ClassDirectory],
+			saker.java.classpath.bundle([
+				"saker.build-test-utils-v{ static(VERSION_saker.build) }",
+			]),
+		],
+		TestClasses: [
+			**.*Test
+		],
+		#ProcessJVMParameters: [ "-agentlib:jdwp=transport=dt_socket,address=localhost:5432,server=y,suspend=y,quiet=y" ],
+		NonDeterministicTests: **,
+		TestInvokerParameters: {
+			TimeoutMillis: 60000,
+		},
+		MaxJVMCount: 1,
+		FailFast: true,
+		AbortOnFail: true,
+		Verbose: true,
+	)
+}

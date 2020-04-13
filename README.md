@@ -1,2 +1,3 @@
 # jvm-tail-recursion
-Optimizer library for tail recursive calls in Java bytecode
+
+Java library performing tail recursion optimizations on Java bytecode.

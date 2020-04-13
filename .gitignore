@@ -1,0 +1,8 @@
+/build/
+/bin/
+/.classpath
+/.project
+/.saker.build.ideconfigs
+/.saker.project.lock
+secret/**
+!secret/readme.md
