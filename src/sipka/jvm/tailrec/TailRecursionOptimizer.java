@@ -15,6 +15,7 @@
  */
 package sipka.jvm.tailrec;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -62,32 +63,17 @@ public class TailRecursionOptimizer {
 	 *            The offset in the array at which the class bytes start.
 	 * @param length
 	 *            The number of bytes the class bytecode consists of starting at offset.
-	 * @return The optimized bytecode. The return value will equal by identity (<code>==</code>) if there were no
-	 *             optimizations performed. The result is <code>null</code> if and only if the argument is
-	 *             <code>null</code>.
+	 * @return The optimized bytecode. The result is <code>null</code> if and only if the argument is <code>null</code>.
 	 */
 	public static byte[] optimizeMethods(byte[] classbytes, int offset, int length) {
 		if (classbytes == null) {
 			return null;
 		}
-		ClassReader cr = new ClassReader(classbytes, offset, length);
-		ClassNode cn = new ClassNode(ASM_API);
-		cr.accept(cn, ClassReader.EXPAND_FRAMES);
-		boolean optimized = false;
-		for (MethodNode mn : cn.methods) {
-			boolean methodoptimized = optimizeMethod(cn.name,
-					((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE), mn);
-			optimized = optimized || methodoptimized;
+		ClassWriter cw = optimizeMethods(new ClassReader(classbytes, offset, length));
+		if (cw == null) {
+			return Arrays.copyOfRange(classbytes, offset, offset + length);
 		}
-		if (!optimized) {
-			return classbytes;
-		}
-
-		ClassWriter cw = new ClassWriter(cr, 0);
-
-		cn.accept(cw);
-		byte[] ncbytes = cw.toByteArray();
-		return ncbytes;
+		return cw.toByteArray();
 	}
 
 	/**
@@ -103,7 +89,30 @@ public class TailRecursionOptimizer {
 		if (classbytes == null) {
 			return null;
 		}
-		return optimizeMethods(classbytes, 0, classbytes.length);
+		ClassWriter cw = optimizeMethods(new ClassReader(classbytes));
+		if (cw == null) {
+			return classbytes;
+		}
+		return cw.toByteArray();
+	}
+
+	private static ClassWriter optimizeMethods(ClassReader cr) {
+		ClassNode cn = new ClassNode(ASM_API);
+		cr.accept(cn, ClassReader.EXPAND_FRAMES);
+		boolean optimized = false;
+		for (MethodNode mn : cn.methods) {
+			boolean methodoptimized = optimizeMethod(cn.name,
+					((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE), mn);
+			optimized = optimized || methodoptimized;
+		}
+		if (!optimized) {
+			return null;
+		}
+
+		ClassWriter cw = new ClassWriter(cr, 0);
+
+		cn.accept(cw);
+		return cw;
 	}
 
 	private static enum VarContents {

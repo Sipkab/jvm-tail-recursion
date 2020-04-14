@@ -18,7 +18,7 @@ import sipka.jvm.tailrec.TailRecursionOptimizer;
 
 public class OptimizerZipResourceTransformerFactory implements ZipResourceTransformerFactory, Externalizable {
 	private static final long serialVersionUID = 1L;
-	
+
 	public static final OptimizerZipResourceTransformerFactory INSTANCE = new OptimizerZipResourceTransformerFactory();
 
 	/**
@@ -37,9 +37,8 @@ public class OptimizerZipResourceTransformerFactory implements ZipResourceTransf
 					return false;
 				}
 				ByteArrayRegion contents = StreamUtils.readStreamFully(resourceinput);
-				byte[] array = contents.getArray();
-				byte[] optimized = TailRecursionOptimizer.optimizeMethods(array, contents.getOffset(),
-						contents.getLength());
+				byte[] array = contents.copyOptionally();
+				byte[] optimized = TailRecursionOptimizer.optimizeMethods(array);
 				if (array == optimized) {
 					//not optimized
 					return false;

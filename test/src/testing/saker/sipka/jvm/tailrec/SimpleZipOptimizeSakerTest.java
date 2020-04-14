@@ -22,10 +22,10 @@ public class SimpleZipOptimizeSakerTest extends NestRepositoryCachingEnvironment
 	@Override
 	protected void runNestTaskTestImpl() throws Throwable {
 		CombinedTargetTaskResult res = runScriptTask("build");
-		SakerPath outjarpath = (SakerPath) res.getTargetTaskResult("path");
+		SakerPath outpath = (SakerPath) res.getTargetTaskResult("path");
 
 		Map<String, ByteArrayRegion> resourceBytes = new TreeMap<>();
-		try (InputStream is = ByteSource.toInputStream(files.openInput(outjarpath));
+		try (InputStream is = ByteSource.toInputStream(files.openInput(outpath));
 				ZipInputStream zis = new ZipInputStream(is)) {
 			for (ZipEntry entry; (entry = zis.getNextEntry()) != null;) {
 				resourceBytes.put(entry.getName(), StreamUtils.readStreamFully(zis));
@@ -38,6 +38,9 @@ public class SimpleZipOptimizeSakerTest extends NestRepositoryCachingEnvironment
 			//this should succeed, as it was optimized
 			c.getMethod("count", int.class).invoke(null, 10000000);
 		}
+
+		runScriptTask("build");
+		assertEmpty(getMetric().getRunTaskIdResults());
 	}
 
 }

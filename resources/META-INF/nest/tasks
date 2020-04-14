@@ -1,1 +1,2 @@
 sipka.jvm.tailrec.zip.transformer=sipka.jvm.tailrec.saker.build.zip.OptimizerZipTransformerTaskFactory
+sipka.jvm.tailrec.optimize=sipka.jvm.tailrec.saker.build.OptimizerTaskFactory

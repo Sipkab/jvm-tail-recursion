@@ -1,0 +1,7 @@
+build(
+	out path
+) {
+	$javac = saker.java.compile(src)
+	
+	$path = sipka.jvm.tailrec.optimize($javac[ClassDirectory])
+} 
