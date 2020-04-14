@@ -39,9 +39,11 @@ import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.JumpInsnNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.LabelNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.LineNumberNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.LocalVariableNode;
+import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.LookupSwitchInsnNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.MethodInsnNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.MethodNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.MultiANewArrayInsnNode;
+import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.TableSwitchInsnNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.TryCatchBlockNode;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.tree.VarInsnNode;
 
@@ -278,6 +280,56 @@ public class TailRecursionOptimizer {
 						default: {
 							//unknown instruction
 							return false;
+						}
+					}
+					break;
+				}
+				case AbstractInsnNode.TABLESWITCH_INSN: {
+					TableSwitchInsnNode tsn = (TableSwitchInsnNode) ins;
+					currentstack.pollFirst();
+					if (tsn.dflt != null) {
+						if (visitedlabelcache.add(tsn.dflt)) {
+							//already visited target label, and re-encountered. it is optimizable
+							if (!isTailOptimizableImpl(tsn.dflt, returntypeframetype, new TreeSet<>(holdingvarnums),
+									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
+								return false;
+							}
+						}
+					}
+					if (tsn.labels != null) {
+						for (LabelNode lbl : tsn.labels) {
+							if (visitedlabelcache.add(lbl)) {
+								//already visited target label, and re-encountered. it is optimizable
+								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeSet<>(holdingvarnums),
+										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
+									return false;
+								}
+							}
+						}
+					}
+					break;
+				}
+				case AbstractInsnNode.LOOKUPSWITCH_INSN: {
+					LookupSwitchInsnNode lsn = (LookupSwitchInsnNode) ins;
+					currentstack.pollFirst();
+					if (lsn.dflt != null) {
+						if (visitedlabelcache.add(lsn.dflt)) {
+							//already visited target label, and re-encountered. it is optimizable
+							if (!isTailOptimizableImpl(lsn.dflt, returntypeframetype, new TreeSet<>(holdingvarnums),
+									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
+								return false;
+							}
+						}
+					}
+					if (lsn.labels != null) {
+						for (LabelNode lbl : lsn.labels) {
+							if (visitedlabelcache.add(lbl)) {
+								//already visited target label, and re-encountered. it is optimizable
+								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeSet<>(holdingvarnums),
+										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
+									return false;
+								}
+							}
 						}
 					}
 					break;
