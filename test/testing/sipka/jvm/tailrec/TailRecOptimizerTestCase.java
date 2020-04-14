@@ -51,6 +51,27 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 		assertSuccessfulOptimizationWithException(unoptimizedmethod, StackOverflowError.class, args);
 	}
 
+	public void assertSuccessfulOptimization(Class<?> clazz, String methodname, Class<?>[] paramtypes, Object... args)
+			throws Exception {
+		assertSuccessfulOptimizationWithException(clazz, methodname, paramtypes, StackOverflowError.class, args);
+	}
+
+	public void assertSuccessfulOptimizationWithException(Class<?> clazz, String methodname, Class<?>[] paramtypes,
+			Class<? extends Throwable> exceptiontype, Object... args) throws ClassNotFoundException,
+			NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
+		Method unoptimizedmethod = clazz.getMethod(methodname, paramtypes);
+		Class<?> optimizedclass = optimizeClass(clazz);
+		for (int i = 0; i < paramtypes.length; i++) {
+			if (!paramtypes[i].isPrimitive()) {
+				paramtypes[i] = Class.forName(paramtypes[i].getName(), false, definingClassLoader);
+			}
+		}
+		Method optimizedmethod = optimizedclass.getMethod(unoptimizedmethod.getName(), paramtypes);
+		assertSuccessfulMethodsOptimizationWithException(createMethodCallArgument(clazz, unoptimizedmethod),
+				unoptimizedmethod, createMethodCallArgument(optimizedclass, optimizedmethod), optimizedmethod,
+				exceptiontype, args);
+	}
+
 	public void assertSuccessfulOptimizationWithException(Method unoptimizedmethod,
 			Class<? extends Throwable> exceptiontype, Object... args) throws ClassNotFoundException,
 			NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
@@ -73,9 +94,17 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 	private static void assertSuccessfulMethodsOptimizationWithException(Method unoptimized, Method optimized,
 			Class<? extends Throwable> expectedexceptiontype, Object... args)
 			throws IllegalAccessException, InvocationTargetException, InstantiationException, NoSuchMethodException {
-		assertOptimizationException(expectedexceptiontype,
-				() -> unoptimized.invoke(createMethodCallArgument(unoptimized), args));
-		optimized.invoke(createMethodCallArgument(optimized), args);
+		Object unoptarg = createMethodCallArgument(unoptimized);
+		Object optarg = createMethodCallArgument(optimized);
+		assertSuccessfulMethodsOptimizationWithException(unoptarg, unoptimized, optarg, optimized,
+				expectedexceptiontype, args);
+	}
+
+	private static void assertSuccessfulMethodsOptimizationWithException(Object unoptarg, Method unoptimized,
+			Object optarg, Method optimized, Class<? extends Throwable> expectedexceptiontype, Object... args)
+			throws IllegalAccessException, InvocationTargetException {
+		assertOptimizationException(expectedexceptiontype, () -> unoptimized.invoke(unoptarg, args));
+		optimized.invoke(optarg, args);
 	}
 
 	private static <T extends Throwable> T assertOptimizationException(Class<T> exceptionclass,
@@ -89,10 +118,14 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 		});
 	}
 
+	private static Object createMethodCallArgument(Class<?> c, Method method)
+			throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
+		return Modifier.isStatic(method.getModifiers()) ? null : c.getConstructor().newInstance();
+	}
+
 	private static Object createMethodCallArgument(Method method)
 			throws InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
-		return Modifier.isStatic(method.getModifiers()) ? null
-				: method.getDeclaringClass().getConstructor().newInstance();
+		return createMethodCallArgument(method.getDeclaringClass(), method);
 	}
 
 	public static class DefiningClassLoader extends ClassLoader {

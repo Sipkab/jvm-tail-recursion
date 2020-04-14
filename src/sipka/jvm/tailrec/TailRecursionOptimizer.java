@@ -166,7 +166,7 @@ public class TailRecursionOptimizer {
 						case Opcodes.IFGE:
 						case Opcodes.IFGT:
 						case Opcodes.IFLE: {
-//							..., value →
+//							..., value 
 //							...
 							JumpInsnNode jmp = (JumpInsnNode) ins;
 							if (!visitedlabelcache.add(jmp.label)) {
@@ -189,7 +189,7 @@ public class TailRecursionOptimizer {
 						case Opcodes.IF_ICMPLE:
 						case Opcodes.IF_ACMPEQ:
 						case Opcodes.IF_ACMPNE: {
-//							..., value1, value2 →
+//							..., value1, value2 
 //							...
 							JumpInsnNode jmp = (JumpInsnNode) ins;
 							if (!visitedlabelcache.add(jmp.label)) {
@@ -270,7 +270,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.ANEWARRAY: {
-//							..., count →
+//							..., count 
 //							..., arrayref
 
 							currentstack.pollFirst();
@@ -370,7 +370,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.DUP_X1: {
-//							..., value2, value1 →
+//							..., value2, value1 
 //							..., value1, value2, value1
 							Boolean f = currentstack.peekFirst();
 							if (f != null) {
@@ -384,7 +384,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.DUP_X2: {
-//							..., value3, value2, value1 →
+//							..., value3, value2, value1 
 //							..., value1, value3, value2, value1
 							Boolean f = currentstack.peekFirst();
 							if (f != null) {
@@ -398,7 +398,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.DUP2: {
-//							..., value2, value1 →
+//							..., value2, value1 
 //							..., value2, value1, value2, value1
 							Boolean f = currentstack.peekFirst();
 							if (f != null) {
@@ -411,7 +411,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.DUP2_X1: {
-//							..., value3, value2, value1 →
+//							..., value3, value2, value1 
 //							..., value2, value1, value3, value2, value1
 							Boolean f = currentstack.peekFirst();
 							if (f != null) {
@@ -425,7 +425,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.DUP2_X2: {
-//							..., value4, value3, value2, value1 →
+//							..., value4, value3, value2, value1 
 //							..., value2, value1, value4, value3, value2, value1
 							Boolean f = currentstack.peekFirst();
 							if (f != null) {
@@ -507,7 +507,7 @@ public class TailRecursionOptimizer {
 						case Opcodes.SALOAD: {
 							//we can optimize array reading away.
 							//it could trigger a nullpointer exception if the array is null, but users really should rely on that
-//							..., arrayref, index →
+//							..., arrayref, index 
 //							..., value
 							currentstack.pollFirst();
 							currentstack.pollFirst();
@@ -676,7 +676,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.NEWARRAY: {
-//							..., count →
+//							..., count 
 //							..., arrayref
 							currentstack.pollFirst();
 							currentstack.addFirst(Boolean.FALSE);
@@ -690,7 +690,7 @@ public class TailRecursionOptimizer {
 					break;
 				}
 				case AbstractInsnNode.MULTIANEWARRAY_INSN: {
-//					..., count1, [count2, ...] →
+//					..., count1, [count2, ...] 
 //					..., arrayref
 					MultiANewArrayInsnNode mnanode = (MultiANewArrayInsnNode) ins;
 					for (int i = 0; i < mnanode.dims; i++) {
@@ -769,7 +769,7 @@ public class TailRecursionOptimizer {
 		return it.next();
 	}
 
-	private static boolean isOptimizableMethod(MethodNode mn) {
+	private static boolean isOptimizableMethod(MethodNode mn, boolean owneritf) {
 		//Can we optimize methods which are not synchronized, but use monitorenter and monitorexit instructions? 
 		//yes:
 		//    only in the case if there is no monitorexit instruction until the return instruction after the method call
@@ -799,6 +799,13 @@ public class TailRecursionOptimizer {
 				return false;
 			}
 			return true;
+		}
+		if (owneritf) {
+			if (((access & Opcodes.ACC_ABSTRACT) != Opcodes.ACC_ABSTRACT)) {
+				//a non-abstract interface method, i.e. default method
+				//it can be optimized with invokespecial
+				return true;
+			}
 		}
 		return false;
 	}
@@ -860,7 +867,11 @@ public class TailRecursionOptimizer {
 	}
 
 	private static boolean optimizeMethod(String methodowner, boolean owneritf, MethodNode mn) {
-		boolean methodoptimizable = isOptimizableMethod(mn);
+		if ("<init>".equals(mn.name) || "<clinit>".equals(mn.name)) {
+			//no optimizations for constructors and static initializers
+			return false;
+		}
+		boolean methodoptimizable = isOptimizableMethod(mn, owneritf);
 		if (!methodoptimizable) {
 			return false;
 		}

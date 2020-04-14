@@ -16,6 +16,17 @@ public class OptimizationImplEdgeCasesTest extends TailRecOptimizerTestCase {
 	}
 
 	public static class TestMethods {
+		public TestMethods() {
+		}
+
+		public TestMethods(int i) {
+			this();
+		}
+
+		static {
+			System.out.println("OptimizationImplEdgeCasesTest.TestMethods.<clinit>()");
+		}
+
 		public static void infloop() {
 			infloop();
 			while (true) {
@@ -63,7 +74,7 @@ public class OptimizationImplEdgeCasesTest extends TailRecOptimizerTestCase {
 			}
 			return whileStartCount(n - 1);
 		}
-		
+
 		//TODO these methods could be optimizable, as the lock is loaded with LDC
 		public static void insynchCount(int n) {
 			synchronized (TestMethods.class) {
