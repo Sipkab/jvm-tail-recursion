@@ -20,10 +20,10 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.ListIterator;
-import java.util.NavigableSet;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
+import java.util.TreeMap;
 
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.ClassReader;
 import sipka.jvm.tailrec.thirdparty.org.objectweb.asm.ClassWriter;
@@ -58,15 +58,19 @@ public class TailRecursionOptimizer {
 	 * 
 	 * @param classbytes
 	 *            The Java class bytecode to optimize.
+	 * @param offset
+	 *            The offset in the array at which the class bytes start.
+	 * @param length
+	 *            The number of bytes the class bytecode consists of starting at offset.
 	 * @return The optimized bytecode. The return value will equal by identity (<code>==</code>) if there were no
 	 *             optimizations performed. The result is <code>null</code> if and only if the argument is
 	 *             <code>null</code>.
 	 */
-	public static byte[] optimizeMethods(byte[] classbytes) {
+	public static byte[] optimizeMethods(byte[] classbytes, int offset, int length) {
 		if (classbytes == null) {
 			return null;
 		}
-		ClassReader cr = new ClassReader(classbytes);
+		ClassReader cr = new ClassReader(classbytes, offset, length);
 		ClassNode cn = new ClassNode(ASM_API);
 		cr.accept(cn, ClassReader.EXPAND_FRAMES);
 		boolean optimized = false;
@@ -86,7 +90,32 @@ public class TailRecursionOptimizer {
 		return ncbytes;
 	}
 
-	private static boolean isTailOptimizable(AbstractInsnNode startnode, Object returntypeframetype) {
+	/**
+	 * Optimizes out the possible tail recursive calls in the argument Java class bytecode.
+	 * 
+	 * @param classbytes
+	 *            The Java class bytecode to optimize.
+	 * @return The optimized bytecode. The return value will equal by identity (<code>==</code>) if there were no
+	 *             optimizations performed. The result is <code>null</code> if and only if the argument is
+	 *             <code>null</code>.
+	 */
+	public static byte[] optimizeMethods(byte[] classbytes) {
+		if (classbytes == null) {
+			return null;
+		}
+		return optimizeMethods(classbytes, 0, classbytes.length);
+	}
+
+	private static enum VarContents {
+		RESULT,
+		THIS,
+		UNKNOWN,
+
+		;
+	}
+
+	private static boolean isTailOptimizable(AbstractInsnNode startnode, Object returntypeframetype,
+			MethodInsnNode mins) {
 		//we need to keep track of visited labels, so we dont get into an infinite loop if the bytecode represents an infinite loop
 		//e.g.:
 		//public static void infloop() {
@@ -95,22 +124,22 @@ public class TailRecursionOptimizer {
 		//	}
 		//}
 
-		NavigableSet<Integer> holdingvarnums = new TreeSet<>();
+		NavigableMap<Integer, Object> varnumcontents = new TreeMap<>();
 		Set<? super LabelNode> visitedlabelcache = new HashSet<>();
-		LinkedList<Boolean> currentstack = new LinkedList<>();
+		LinkedList<Object> currentstack = new LinkedList<>();
 		if (returntypeframetype != null) {
 			if (returntypeframetype.equals(Opcodes.LONG) || returntypeframetype.equals(Opcodes.DOUBLE)) {
-				currentstack.push(Boolean.TRUE);
+				currentstack.push(VarContents.RESULT);
 			}
-			currentstack.push(Boolean.TRUE);
+			currentstack.push(VarContents.RESULT);
 		} //else no return value of the method, stack doesnt contain the return value
 
-		return isTailOptimizableImpl(startnode, returntypeframetype, holdingvarnums, visitedlabelcache, currentstack);
+		return isTailOptimizableImpl(startnode, returntypeframetype, varnumcontents, visitedlabelcache, currentstack);
 	}
 
 	private static boolean isTailOptimizableImpl(AbstractInsnNode startnode, Object returntypeframetype,
-			NavigableSet<Integer> holdingvarnums, Set<? super LabelNode> visitedlabelcache,
-			LinkedList<Boolean> currentstack) throws AssertionError {
+			NavigableMap<Integer, Object> varnumcontents, Set<? super LabelNode> visitedlabelcache,
+			LinkedList<Object> currentstack) throws AssertionError {
 		for (AbstractInsnNode ins = startnode; (ins = ins.getNext()) != null;) {
 			switch (ins.getType()) {
 				case AbstractInsnNode.FRAME: {
@@ -122,9 +151,9 @@ public class TailRecursionOptimizer {
 					for (Object locobj : fins.local) {
 						boolean wide = locobj.equals(Opcodes.LONG) || locobj.equals(Opcodes.DOUBLE);
 						if (!Objects.equals(returntypeframetype, locobj)) {
-							holdingvarnums.remove(varidx);
+							varnumcontents.remove(varidx);
 							if (wide) {
-								holdingvarnums.remove(varidx + 1);
+								varnumcontents.remove(varidx + 1);
 							}
 						}
 						if (wide) {
@@ -133,7 +162,7 @@ public class TailRecursionOptimizer {
 							varidx += 1;
 						}
 					}
-					holdingvarnums.tailSet(varidx, true).clear();
+					varnumcontents.tailMap(varidx, true).clear();
 					//we don't modify the stack in case of new frame. It is the job of the JVM to verify its validity
 					break;
 				}
@@ -174,7 +203,7 @@ public class TailRecursionOptimizer {
 								return true;
 							}
 							currentstack.pollFirst();
-							if (!isTailOptimizableImpl(jmp.label, returntypeframetype, new TreeSet<>(holdingvarnums),
+							if (!isTailOptimizableImpl(jmp.label, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 								return false;
 							}
@@ -198,7 +227,7 @@ public class TailRecursionOptimizer {
 							}
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							if (!isTailOptimizableImpl(jmp.label, returntypeframetype, new TreeSet<>(holdingvarnums),
+							if (!isTailOptimizableImpl(jmp.label, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 								return false;
 							}
@@ -221,9 +250,9 @@ public class TailRecursionOptimizer {
 							FieldInsnNode fins = (FieldInsnNode) ins;
 							if ("J".equals(fins.desc) || "D".equals(fins.desc)) {
 								//2x size
-								currentstack.addFirst(Boolean.FALSE);
+								currentstack.addFirst(VarContents.UNKNOWN);
 							}
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.GETFIELD: {
@@ -233,9 +262,9 @@ public class TailRecursionOptimizer {
 							FieldInsnNode fins = (FieldInsnNode) ins;
 							if ("J".equals(fins.desc) || "D".equals(fins.desc)) {
 								//2x size
-								currentstack.addFirst(Boolean.FALSE);
+								currentstack.addFirst(VarContents.UNKNOWN);
 							}
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						default: {
@@ -248,7 +277,7 @@ public class TailRecursionOptimizer {
 				case AbstractInsnNode.IINC_INSN: {
 					IincInsnNode iincn = (IincInsnNode) ins;
 					//remove the holding var, as it has been modified
-					holdingvarnums.remove(iincn.var);
+					varnumcontents.remove(iincn.var);
 					//doesn't change the stack
 					break;
 				}
@@ -256,7 +285,7 @@ public class TailRecursionOptimizer {
 					switch (ins.getOpcode()) {
 						case Opcodes.INSTANCEOF: {
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.CHECKCAST: {
@@ -266,7 +295,7 @@ public class TailRecursionOptimizer {
 							break;
 						}
 						case Opcodes.NEW: {
-							currentstack.add(Boolean.FALSE);
+							currentstack.add(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.ANEWARRAY: {
@@ -274,7 +303,7 @@ public class TailRecursionOptimizer {
 //							..., arrayref
 
 							currentstack.pollFirst();
-							currentstack.add(Boolean.FALSE);
+							currentstack.add(VarContents.UNKNOWN);
 							break;
 						}
 						default: {
@@ -290,7 +319,7 @@ public class TailRecursionOptimizer {
 					if (tsn.dflt != null) {
 						if (visitedlabelcache.add(tsn.dflt)) {
 							//already visited target label, and re-encountered. it is optimizable
-							if (!isTailOptimizableImpl(tsn.dflt, returntypeframetype, new TreeSet<>(holdingvarnums),
+							if (!isTailOptimizableImpl(tsn.dflt, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 								return false;
 							}
@@ -300,7 +329,7 @@ public class TailRecursionOptimizer {
 						for (LabelNode lbl : tsn.labels) {
 							if (visitedlabelcache.add(lbl)) {
 								//already visited target label, and re-encountered. it is optimizable
-								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeSet<>(holdingvarnums),
+								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeMap<>(varnumcontents),
 										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 									return false;
 								}
@@ -315,7 +344,7 @@ public class TailRecursionOptimizer {
 					if (lsn.dflt != null) {
 						if (visitedlabelcache.add(lsn.dflt)) {
 							//already visited target label, and re-encountered. it is optimizable
-							if (!isTailOptimizableImpl(lsn.dflt, returntypeframetype, new TreeSet<>(holdingvarnums),
+							if (!isTailOptimizableImpl(lsn.dflt, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 								return false;
 							}
@@ -325,7 +354,7 @@ public class TailRecursionOptimizer {
 						for (LabelNode lbl : lsn.labels) {
 							if (visitedlabelcache.add(lbl)) {
 								//already visited target label, and re-encountered. it is optimizable
-								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeSet<>(holdingvarnums),
+								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeMap<>(varnumcontents),
 										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
 									return false;
 								}
@@ -343,15 +372,15 @@ public class TailRecursionOptimizer {
 						case Opcodes.ARETURN:
 						case Opcodes.FRETURN:
 						case Opcodes.IRETURN: {
-							if (currentstack.peekFirst() == Boolean.TRUE) {
+							if (currentstack.peekFirst() == VarContents.RESULT) {
 								return true;
 							}
 							return false;
 						}
 						case Opcodes.DRETURN:
 						case Opcodes.LRETURN: {
-							Iterator<Boolean> it = currentstack.iterator();
-							if (it.next() == Boolean.TRUE && it.next() == Boolean.TRUE) {
+							Iterator<?> it = currentstack.iterator();
+							if (it.next() == VarContents.RESULT && it.next() == VarContents.RESULT) {
 								return true;
 							}
 							return false;
@@ -363,7 +392,7 @@ public class TailRecursionOptimizer {
 						}
 
 						case Opcodes.DUP: {
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
 								currentstack.addFirst(f);
 							}
@@ -372,9 +401,9 @@ public class TailRecursionOptimizer {
 						case Opcodes.DUP_X1: {
 //							..., value2, value1 
 //							..., value1, value2, value1
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
-								ListIterator<Boolean> it = currentstack.listIterator();
+								ListIterator<Object> it = currentstack.listIterator();
 								//first
 								it.next();
 								addStackElementIfDoesntExist(it);
@@ -386,9 +415,9 @@ public class TailRecursionOptimizer {
 						case Opcodes.DUP_X2: {
 //							..., value3, value2, value1 
 //							..., value1, value3, value2, value1
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
-								ListIterator<Boolean> it = currentstack.listIterator();
+								ListIterator<Object> it = currentstack.listIterator();
 								//first
 								it.next();
 								addStackElementIfDoesntExist(it);
@@ -400,11 +429,11 @@ public class TailRecursionOptimizer {
 						case Opcodes.DUP2: {
 //							..., value2, value1 
 //							..., value2, value1, value2, value1
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
-								ListIterator<Boolean> it = currentstack.listIterator();
+								ListIterator<Object> it = currentstack.listIterator();
 								it.next();
-								Boolean s = addStackElementIfDoesntExist(it);
+								Object s = addStackElementIfDoesntExist(it);
 								it.add(f);
 								it.add(s);
 							}
@@ -413,11 +442,11 @@ public class TailRecursionOptimizer {
 						case Opcodes.DUP2_X1: {
 //							..., value3, value2, value1 
 //							..., value2, value1, value3, value2, value1
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
-								ListIterator<Boolean> it = currentstack.listIterator();
+								ListIterator<Object> it = currentstack.listIterator();
 								it.next();
-								Boolean s = addStackElementIfDoesntExist(it);
+								Object s = addStackElementIfDoesntExist(it);
 								addStackElementIfDoesntExist(it);
 								it.add(f);
 								it.add(s);
@@ -427,11 +456,11 @@ public class TailRecursionOptimizer {
 						case Opcodes.DUP2_X2: {
 //							..., value4, value3, value2, value1 
 //							..., value2, value1, value4, value3, value2, value1
-							Boolean f = currentstack.peekFirst();
+							Object f = currentstack.peekFirst();
 							if (f != null) {
-								ListIterator<Boolean> it = currentstack.listIterator();
+								ListIterator<Object> it = currentstack.listIterator();
 								it.next();
-								Boolean s = addStackElementIfDoesntExist(it);
+								Object s = addStackElementIfDoesntExist(it);
 								addStackElementIfDoesntExist(it);
 								addStackElementIfDoesntExist(it);
 								it.add(f);
@@ -456,13 +485,13 @@ public class TailRecursionOptimizer {
 								}
 								case 1: {
 									//anything that is first, will be second
-									currentstack.addFirst(Boolean.FALSE);
+									currentstack.addFirst(VarContents.UNKNOWN);
 									break;
 								}
 								default: {
 									//swap the first 2 values
-									Boolean first = currentstack.removeFirst();
-									Boolean second = currentstack.removeFirst();
+									Object first = currentstack.removeFirst();
+									Object second = currentstack.removeFirst();
 									currentstack.addFirst(first);
 									currentstack.addFirst(second);
 									break;
@@ -474,7 +503,7 @@ public class TailRecursionOptimizer {
 							//we can optimize array length reading away.
 							//it could trigger a nullpointer exception if the array is null, but users really should rely on that
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.ICONST_M1:
@@ -488,15 +517,15 @@ public class TailRecursionOptimizer {
 						case Opcodes.FCONST_1:
 						case Opcodes.FCONST_2:
 						case Opcodes.ACONST_NULL: {
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.LCONST_0:
 						case Opcodes.LCONST_1:
 						case Opcodes.DCONST_0:
 						case Opcodes.DCONST_1: {
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.IALOAD:
@@ -511,15 +540,15 @@ public class TailRecursionOptimizer {
 //							..., value
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.LALOAD:
 						case Opcodes.DALOAD: {
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.IASTORE:
@@ -542,8 +571,8 @@ public class TailRecursionOptimizer {
 							currentstack.pollFirst();
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.IADD:
@@ -567,7 +596,7 @@ public class TailRecursionOptimizer {
 							//size 1, size 1 -> 1
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 
@@ -588,8 +617,8 @@ public class TailRecursionOptimizer {
 							currentstack.pollFirst();
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 
@@ -601,7 +630,7 @@ public class TailRecursionOptimizer {
 							currentstack.pollFirst();
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 
@@ -612,7 +641,7 @@ public class TailRecursionOptimizer {
 							//size 2 -> 1
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.I2F:
@@ -624,7 +653,7 @@ public class TailRecursionOptimizer {
 						case Opcodes.F2I: {
 							//size 1 -> 1
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.LXOR:
@@ -635,8 +664,8 @@ public class TailRecursionOptimizer {
 							//size 2 -> 2
 							currentstack.pollFirst();
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 
@@ -646,8 +675,8 @@ public class TailRecursionOptimizer {
 						case Opcodes.F2D: {
 							//size 1 -> 2
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 
@@ -672,14 +701,14 @@ public class TailRecursionOptimizer {
 					switch (ins.getOpcode()) {
 						case Opcodes.BIPUSH:
 						case Opcodes.SIPUSH: {
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						case Opcodes.NEWARRAY: {
 //							..., count 
 //							..., arrayref
 							currentstack.pollFirst();
-							currentstack.addFirst(Boolean.FALSE);
+							currentstack.addFirst(VarContents.UNKNOWN);
 							break;
 						}
 						default: {
@@ -696,7 +725,7 @@ public class TailRecursionOptimizer {
 					for (int i = 0; i < mnanode.dims; i++) {
 						currentstack.pollFirst();
 					}
-					currentstack.addFirst(Boolean.FALSE);
+					currentstack.addFirst(VarContents.UNKNOWN);
 					break;
 				}
 				case AbstractInsnNode.VAR_INSN: {
@@ -705,13 +734,13 @@ public class TailRecursionOptimizer {
 						case Opcodes.FLOAD:
 						case Opcodes.ILOAD: {
 							VarInsnNode vins = (VarInsnNode) ins;
-							currentstack.push(holdingvarnums.contains(vins.var) ? Boolean.TRUE : Boolean.FALSE);
+							currentstack.push(varnumcontents.getOrDefault(vins.var, VarContents.UNKNOWN));
 							break;
 						}
 						case Opcodes.DLOAD:
 						case Opcodes.LLOAD: {
 							VarInsnNode vins = (VarInsnNode) ins;
-							Boolean holding = holdingvarnums.contains(vins.var) ? Boolean.TRUE : Boolean.FALSE;
+							Object holding = varnumcontents.getOrDefault(vins.var, VarContents.UNKNOWN);
 							currentstack.push(holding);
 							currentstack.push(holding);
 							break;
@@ -720,25 +749,26 @@ public class TailRecursionOptimizer {
 						case Opcodes.FSTORE:
 						case Opcodes.ISTORE: {
 							VarInsnNode vins = (VarInsnNode) ins;
-							Boolean f = currentstack.pollFirst();
-							if (f == Boolean.TRUE) {
-								holdingvarnums.add(vins.var);
-							} else {
-								holdingvarnums.remove(vins.var);
+							Object f = currentstack.pollFirst();
+							if (f == null) {
+								f = VarContents.UNKNOWN;
 							}
+							varnumcontents.put(vins.var, f);
 							break;
 						}
 						case Opcodes.DSTORE:
 						case Opcodes.LSTORE: {
 							VarInsnNode vins = (VarInsnNode) ins;
-							Boolean f = currentstack.pollFirst();
-							Boolean f2 = currentstack.pollFirst();
-							if (f == Boolean.TRUE && f2 == Boolean.TRUE) {
-								holdingvarnums.add(vins.var);
-							} else {
-								holdingvarnums.remove(vins.var);
-								holdingvarnums.remove(vins.var + 1);
+							Object f = currentstack.pollFirst();
+							Object f2 = currentstack.pollFirst();
+							if (f == null) {
+								f = VarContents.UNKNOWN;
 							}
+							if (f2 == null) {
+								f2 = VarContents.UNKNOWN;
+							}
+							varnumcontents.put(vins.var, f);
+							varnumcontents.put(vins.var + 1, f);
 							break;
 						}
 						default: {
@@ -749,7 +779,7 @@ public class TailRecursionOptimizer {
 					break;
 				}
 				case AbstractInsnNode.LDC_INSN: {
-					currentstack.push(Boolean.FALSE);
+					currentstack.push(VarContents.UNKNOWN);
 					break;
 				}
 				default: {
@@ -761,10 +791,10 @@ public class TailRecursionOptimizer {
 		return false;
 	}
 
-	private static Boolean addStackElementIfDoesntExist(ListIterator<Boolean> it) {
+	private static Object addStackElementIfDoesntExist(ListIterator<Object> it) {
 		if (!it.hasNext()) {
-			it.add(Boolean.FALSE);
-			return Boolean.FALSE;
+			it.add(VarContents.UNKNOWN);
+			return VarContents.UNKNOWN;
 		}
 		return it.next();
 	}
@@ -779,6 +809,10 @@ public class TailRecursionOptimizer {
 		//        (no corresponding exit for the enter instruction)
 		//        in this case if we optimize the recursive call, no semantic changes occurr
 		//        as the unmatched monitorenter would not be exited anyway even if we don't optimize.
+
+		//TODO virtual methods could still be optimizable if we keep track of the this reference in the variables
+		//     and on the stack. if we can be sure that the recursive call is always made on this, then
+		//     the method could be optimized
 
 		int access = mn.access;
 		if (((access & Opcodes.ACC_NATIVE) == Opcodes.ACC_NATIVE)
@@ -943,7 +977,7 @@ public class TailRecursionOptimizer {
 				MethodInsnNode mins = (MethodInsnNode) ins;
 				if (methodowner.equals(mins.owner) && mn.name.equals(mins.name) && mn.desc.equals(mins.desc)
 						&& owneritf == mins.itf) {
-					boolean optimizablecall = isTailOptimizable(mins, returntypeframetype);
+					boolean optimizablecall = isTailOptimizable(mins, returntypeframetype, mins);
 					if (optimizablecall) {
 						if (gotolabelnode == null) {
 							gotolabelnode = insertStartGotoLabel(mn);

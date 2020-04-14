@@ -2,6 +2,10 @@ static(VERSION_saker.build) = nest.dependency.resolve(
 	saker.build,
 	Filters: nest.dependency.filter.kind([]),
 )[Bundles][0][BundleIdentifier][VersionNumber]
+static(VERSION_saker.nest) = nest.dependency.resolve(
+	saker.nest,
+	Filters: nest.dependency.filter.kind([]),
+)[Bundles][0][BundleIdentifier][VersionNumber]
 
 static(VERSION_sipka.cmdline) = "0.8.0"
 
@@ -23,6 +27,11 @@ compile(
 		ClassPath: [
 			saker.java.classpath.bundle("sipka.cmdline-api-v{ static(VERSION_sipka.cmdline) }"),
 			saker.java.classpath.bundle("sipka.cmdline-runtime-v{ static(VERSION_sipka.cmdline) }"),
+			saker.java.classpath.bundle(nest.dependency.resolve(
+				Bundles: [saker.build-api, saker.nest-api],
+				DependencyFile: resources/META-INF/nest/dependencies,
+				Filters: nest.dependency.filter.compile(CompileTransitive: false),
+			))
 		],
 	)
 }
@@ -31,8 +40,13 @@ export(
 	in compile = include(compile),
 	
 	out jar,
+	out compile,
+	out bundlepaths = [
+		$jar[Path],
+	]
 ){
 	$jar = saker.jar.create(
+		Output: sipka.jvm.tailrec.jar,
 		Resources: [
 			{
 				Directory: $compile[javac][ClassDirectory],
@@ -41,6 +55,10 @@ export(
 			{
 				Files: LICENSE,
 				TargetDirectory: META-INF,
+			},
+			{
+				Directory: resources/,
+				Resources: **,
 			}
 		],
 		Includes: [
@@ -51,23 +69,29 @@ export(
 		],
 		Manifest: {
 			MainAttributes: {
-				Main-Class: sipka.jvm.tailrec.Main
+				Main-Class: sipka.jvm.tailrec.Main,
+				Nest-Bundle-Format-Version: 1,
+				Nest-Bundle-Identifier: "sipka.jvm.tailrec-v0.8.0",
 			}
 		}
 	)
 }
 
 test(){
-	$compile = include(compile)
+	$export = include(export)
+	$compile = $export[compile]
 	$testcompile = saker.java.compile(
-		SourceDirectories: test,
+		SourceDirectories: test/src/,
 		ClassPath: [
-			$compile[javac],
+			$compile[javac][ClassDirectory],
 			saker.java.classpath.bundle([
 				"saker.build-test-runner-v{ static(VERSION_saker.build) }",
 				"saker.build-test-utils-v{ static(VERSION_saker.build) }",
+				"saker.nest-test-utils-v{ static(VERSION_saker.nest )}",
 			]),
+			$instrumentedjar
 		],
+		Identifier: tests,
 	)
 	
 	saker.java.test(
@@ -83,13 +107,73 @@ test(){
 			]),
 		],
 		TestClasses: [
-			**.*Test
+			testing.sipka.**.*Test
 		],
 		#ProcessJVMParameters: [ "-agentlib:jdwp=transport=dt_socket,address=localhost:5432,server=y,suspend=y,quiet=y" ],
 		NonDeterministicTests: **,
 		TestInvokerParameters: {
 			TimeoutMillis: 60000,
 		},
+		MaxJVMCount: 1,
+		FailFast: true,
+		AbortOnFail: true,
+		Verbose: true,
+	)
+	
+	
+	$instrumentedjar = nest.test.instrument(
+		nest.bundle.download("saker.build-test-v{ static(VERSION_saker.build) }")[BundlePaths][0],
+		NestVersion: static(VERSION_saker.nest),
+	)
+	
+	$resolveddependencies = nest.dependency.resolve(
+		Bundles: [saker.zip, saker.java.compiler],
+		DependencyFile: resources/META-INF/nest/dependencies,
+		Filters: nest.dependency.filter.kind(classpath)
+	)
+	
+	saker.java.test(
+		TestRunnerClassPath: [
+			saker.java.classpath.bundle("saker.build-test-runner-v{ static(VERSION_saker.build) }"),
+		],
+		ClassPath: [
+			$instrumentedjar,
+		],
+		DependencyClassPath: [
+			$export[compile][javac],
+		],
+		TestInvokerClass: testing.saker.SakerJavaTestingInvoker,
+		TestClassPath:	[
+			$testcompile[ClassDirectory],
+			saker.java.classpath.bundle([
+				"saker.build-test-utils-v{ static(VERSION_saker.build) }",
+				"saker.nest-test-utils-v{ static(VERSION_saker.nest )}",
+			]),
+		],
+		TestClasses: [
+			testing.saker.sipka.**.*Test
+		],
+		NonDeterministicTests: [
+			**,
+		],
+		TestClassParameters: {
+			**: {
+				RepositoryJarPath: nest.bundle.localize("saker.nest-test-v{ static(VERSION_saker.nest) }")[BundleLocalPaths][0],
+				RepositoryParameterBundles: "{
+						foreach $path in $export[bundlepaths]: "{ std.file.mirror($path) };" 
+					};{ 
+						foreach $path in nest.bundle.localize($resolveddependencies)[BundleLocalPaths]: ";{ $path }"
+					}",
+			}
+		},
+		TestInvokerParameters: {
+			SakerJarPath: std.file.mirror($instrumentedjar),
+			TimeoutMillis: 120000,
+			TestsBaseBuildDirectory: std.file.mirror.path(std.file.place(test/build)),
+		},
+		IgnoreFileChanges: [
+			std.file.place(test/build),
+		],
 		MaxJVMCount: 1,
 		FailFast: true,
 		AbortOnFail: true,
