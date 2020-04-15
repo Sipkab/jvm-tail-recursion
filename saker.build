@@ -1,3 +1,5 @@
+global(VERSION_sipka.jvm.tailrec) = "0.8.0"
+
 static(VERSION_saker.build) = nest.dependency.resolve(
 	saker.build,
 	Filters: nest.dependency.filter.kind([]),
@@ -38,11 +40,14 @@ compile(
 
 export(
 	in compile = include(compile),
+	out compile,
 	
 	out jar,
-	out compile,
+	out sourcejar,
+	
 	out bundlepaths = [
 		$jar[Path],
+		$sourcejar[Path],
 	]
 ){
 	$jar = saker.jar.create(
@@ -71,12 +76,47 @@ export(
 			MainAttributes: {
 				Main-Class: sipka.jvm.tailrec.Main,
 				Nest-Bundle-Format-Version: 1,
-				Nest-Bundle-Identifier: "sipka.jvm.tailrec-v0.8.0",
+				Nest-Bundle-Identifier: "sipka.jvm.tailrec-v{ global(VERSION_sipka.jvm.tailrec) }",
+				Nest-Bundle-Source: "sipka.jvm.tailrec-sources-v{ global(VERSION_sipka.jvm.tailrec) }"
 			}
 		}
 	)
+	$sourcejar = saker.jar.create(
+		Output: sipka.jvm.tailrec-sources.jar,
+		Resources: [
+			{
+				Directory: [
+					src/,
+				],
+				Resources: **/*.java,
+			},
+			{
+				Files: LICENSE,
+				TargetDirectory: META-INF,
+			}
+		],
+		Manifest: {
+			MainAttributes: {
+				Nest-Bundle-Format-Version: 1,
+				Nest-Bundle-Identifier: "sipka.jvm.tailrec-sources-v{ global(VERSION_sipka.jvm.tailrec) }",
+			},
+		},
+	)
 }
-
+install() {
+	$export = include(export)
+	nest.local.install(Bundle: $export[bundlepaths])
+}
+upload(){
+	$export = include(export, Path: saker.build)
+	include(Path: secret/secrets.build)
+	nest.server.upload(
+		Bundles: $export[bundlepaths],
+		APIKey: global(sipka.jvm.tailrec.UPLOAD_API_KEY),
+		APISecret: global(sipka.jvm.tailrec.UPLOAD_API_SECRET),
+		Overwrite: true,
+	)
+}
 test(){
 	$export = include(export)
 	$compile = $export[compile]
