@@ -167,7 +167,7 @@ test(){
 	)
 	
 	$resolveddependencies = nest.dependency.resolve(
-		Bundles: [saker.zip, saker.java.compiler],
+		Bundles: [saker.zip, saker.java.compiler, saker.jar],
 		DependencyFile: resources/META-INF/nest/dependencies,
 		Filters: nest.dependency.filter.kind(classpath)
 	)

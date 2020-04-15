@@ -1,0 +1,15 @@
+build(
+	out path
+) {
+	$javac = saker.java.compile(src)
+	
+	$jar = saker.jar.create(
+		Resources: {
+			Directory: $javac[ClassDirectory],
+			Resources: **,
+		},
+		Transformers: sipka.jvm.tailrec.zip.transformer(),
+	)
+	
+	$path = $jar[Path]
+} 

@@ -29,6 +29,8 @@ import sipka.cmdline.api.PositionalParameter;
  * <pre>
  * Tail recursion optimizer for Java bytecode.
  * 
+ *     https://github.com/Sipkab/jvm-tail-recursion
+ * 
  * The program takes Java class files as its input and optimizes tail recursive calls 
  * in a way that it won't overflow the stack.
  * 

@@ -1,0 +1,24 @@
+build(
+	out path,
+	out secondpath,
+) {
+	$javac = saker.java.compile(src)
+	
+	$jar = saker.jar.create(
+		Output: first.jar,
+		Resources: {
+			Directory: $javac[ClassDirectory],
+			Resources: **,
+		},
+		Transformers: sipka.jvm.tailrec.zip.transformer(),
+	)
+	
+	$secondjar = saker.jar.create(
+		Output: second.jar,
+		Include: $jar[Path],
+		Transformers: sipka.jvm.tailrec.zip.transformer(),
+	)
+	
+	$path = $jar[Path]
+	$secondpath = $secondjar[Path]
+} 
