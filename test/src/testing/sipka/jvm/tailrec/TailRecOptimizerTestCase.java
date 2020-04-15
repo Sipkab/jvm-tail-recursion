@@ -47,16 +47,45 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 		return getResourceBytes(clazz.getClassLoader(), clazz.getName().replace('.', '/') + ".class");
 	}
 
+	public void assertOptimizationResultEquals(Method unoptimizedmethod, Object... args) throws Throwable {
+		Class<?> optimizedclass = optimizeClass(unoptimizedmethod.getDeclaringClass());
+		Class<?>[] paramtypes = unoptimizedmethod.getParameterTypes();
+		for (int i = 0; i < paramtypes.length; i++) {
+			if (!paramtypes[i].isPrimitive()) {
+				paramtypes[i] = Class.forName(paramtypes[i].getName(), false, definingClassLoader);
+			}
+		}
+		Method optimizedmethod = optimizedclass.getMethod(unoptimizedmethod.getName(), paramtypes);
+		Object unoptresult = unoptimizedmethod.invoke(createMethodCallArgument(unoptimizedmethod), args);
+		Object optresult = optimizedmethod.invoke(createMethodCallArgument(optimizedmethod), args);
+		assertEquals(unoptresult, optresult);
+	}
+
+	public void assertNotOptimized(Method unoptimizedmethod, Object... args) throws Throwable {
+		Class<?> optimizedclass = optimizeClass(unoptimizedmethod.getDeclaringClass());
+		Class<?>[] paramtypes = unoptimizedmethod.getParameterTypes();
+		for (int i = 0; i < paramtypes.length; i++) {
+			if (!paramtypes[i].isPrimitive()) {
+				paramtypes[i] = Class.forName(paramtypes[i].getName(), false, definingClassLoader);
+			}
+		}
+		Method optimizedmethod = optimizedclass.getMethod(unoptimizedmethod.getName(), paramtypes);
+		assertOptimizationException(StackOverflowError.class,
+				() -> unoptimizedmethod.invoke(createMethodCallArgument(unoptimizedmethod), args));
+		assertOptimizationException(StackOverflowError.class,
+				() -> optimizedmethod.invoke(createMethodCallArgument(optimizedmethod), args));
+	}
+
 	public void assertSuccessfulOptimization(Method unoptimizedmethod, Object... args) throws Throwable {
 		assertSuccessfulOptimizationWithException(unoptimizedmethod, StackOverflowError.class, args);
 	}
 
 	public void assertSuccessfulOptimization(Class<?> clazz, String methodname, Class<?>[] paramtypes, Object... args)
 			throws Exception {
-		assertSuccessfulOptimizationWithException(clazz, methodname, paramtypes, StackOverflowError.class, args);
+		assertOptimizationWithException(clazz, methodname, paramtypes, StackOverflowError.class, args);
 	}
 
-	public void assertSuccessfulOptimizationWithException(Class<?> clazz, String methodname, Class<?>[] paramtypes,
+	public void assertOptimizationWithException(Class<?> clazz, String methodname, Class<?>[] paramtypes,
 			Class<? extends Throwable> exceptiontype, Object... args) throws ClassNotFoundException,
 			NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException {
 		Method unoptimizedmethod = clazz.getMethod(methodname, paramtypes);

@@ -123,6 +123,47 @@ public class TailRecursionOptimizer {
 		;
 	}
 
+	private static class VisitedLabelState {
+		protected LabelNode labelNode;
+		protected NavigableMap<Integer, Object> variableContents;
+
+		public VisitedLabelState(LabelNode labelNode, NavigableMap<Integer, Object> variableContents) {
+			this.labelNode = labelNode;
+			this.variableContents = new TreeMap<>(variableContents);
+		}
+
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result + ((labelNode == null) ? 0 : labelNode.hashCode());
+			result = prime * result + ((variableContents == null) ? 0 : variableContents.hashCode());
+			return result;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			VisitedLabelState other = (VisitedLabelState) obj;
+			if (labelNode == null) {
+				if (other.labelNode != null)
+					return false;
+			} else if (!labelNode.equals(other.labelNode))
+				return false;
+			if (variableContents == null) {
+				if (other.variableContents != null)
+					return false;
+			} else if (!variableContents.equals(other.variableContents))
+				return false;
+			return true;
+		}
+	}
+
 	private static boolean isTailOptimizable(AbstractInsnNode startnode, Object returntypeframetype,
 			MethodInsnNode mins) {
 		//we need to keep track of visited labels, so we dont get into an infinite loop if the bytecode represents an infinite loop
@@ -134,7 +175,7 @@ public class TailRecursionOptimizer {
 		//}
 
 		NavigableMap<Integer, Object> varnumcontents = new TreeMap<>();
-		Set<? super LabelNode> visitedlabelcache = new HashSet<>();
+		Set<? super VisitedLabelState> visitedlabelcache = new HashSet<>();
 		LinkedList<Object> currentstack = new LinkedList<>();
 		if (returntypeframetype != null) {
 			if (returntypeframetype.equals(Opcodes.LONG) || returntypeframetype.equals(Opcodes.DOUBLE)) {
@@ -147,7 +188,7 @@ public class TailRecursionOptimizer {
 	}
 
 	private static boolean isTailOptimizableImpl(AbstractInsnNode startnode, Object returntypeframetype,
-			NavigableMap<Integer, Object> varnumcontents, Set<? super LabelNode> visitedlabelcache,
+			NavigableMap<Integer, Object> varnumcontents, Set<? super VisitedLabelState> visitedlabelcache,
 			LinkedList<Object> currentstack) throws AssertionError {
 		for (AbstractInsnNode ins = startnode; (ins = ins.getNext()) != null;) {
 			switch (ins.getType()) {
@@ -179,7 +220,8 @@ public class TailRecursionOptimizer {
 					break;
 				}
 				case AbstractInsnNode.LABEL: {
-					if (!visitedlabelcache.add((LabelNode) ins)) {
+					VisitedLabelState labelstate = new VisitedLabelState((LabelNode) ins, varnumcontents);
+					if (!visitedlabelcache.add(labelstate)) {
 						//already visited target label, and re-encountered. it is optimizable
 						return true;
 					}
@@ -189,7 +231,8 @@ public class TailRecursionOptimizer {
 					switch (ins.getOpcode()) {
 						case Opcodes.GOTO: {
 							JumpInsnNode jmp = (JumpInsnNode) ins;
-							if (!visitedlabelcache.add(jmp.label)) {
+							VisitedLabelState labelstate = new VisitedLabelState(jmp.label, varnumcontents);
+							if (!visitedlabelcache.add(labelstate)) {
 								//already visited target label, and re-encountered. it is optimizable
 								return true;
 							}
@@ -207,7 +250,8 @@ public class TailRecursionOptimizer {
 //							..., value 
 //							...
 							JumpInsnNode jmp = (JumpInsnNode) ins;
-							if (!visitedlabelcache.add(jmp.label)) {
+							VisitedLabelState labelstate = new VisitedLabelState(jmp.label, varnumcontents);
+							if (!visitedlabelcache.add(labelstate)) {
 								//already visited target label, and re-encountered. it is optimizable
 								return true;
 							}
@@ -230,7 +274,8 @@ public class TailRecursionOptimizer {
 //							..., value1, value2 
 //							...
 							JumpInsnNode jmp = (JumpInsnNode) ins;
-							if (!visitedlabelcache.add(jmp.label)) {
+							VisitedLabelState labelstate = new VisitedLabelState(jmp.label, varnumcontents);
+							if (!visitedlabelcache.add(labelstate)) {
 								//already visited target label, and re-encountered. it is optimizable
 								return true;
 							}
@@ -326,7 +371,8 @@ public class TailRecursionOptimizer {
 					TableSwitchInsnNode tsn = (TableSwitchInsnNode) ins;
 					currentstack.pollFirst();
 					if (tsn.dflt != null) {
-						if (visitedlabelcache.add(tsn.dflt)) {
+						VisitedLabelState labelstate = new VisitedLabelState(tsn.dflt, varnumcontents);
+						if (visitedlabelcache.add(labelstate)) {
 							//already visited target label, and re-encountered. it is optimizable
 							if (!isTailOptimizableImpl(tsn.dflt, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
@@ -336,7 +382,8 @@ public class TailRecursionOptimizer {
 					}
 					if (tsn.labels != null) {
 						for (LabelNode lbl : tsn.labels) {
-							if (visitedlabelcache.add(lbl)) {
+							VisitedLabelState labelstate = new VisitedLabelState(lbl, varnumcontents);
+							if (visitedlabelcache.add(labelstate)) {
 								//already visited target label, and re-encountered. it is optimizable
 								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeMap<>(varnumcontents),
 										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
@@ -351,7 +398,8 @@ public class TailRecursionOptimizer {
 					LookupSwitchInsnNode lsn = (LookupSwitchInsnNode) ins;
 					currentstack.pollFirst();
 					if (lsn.dflt != null) {
-						if (visitedlabelcache.add(lsn.dflt)) {
+						VisitedLabelState labelstate = new VisitedLabelState(lsn.dflt, varnumcontents);
+						if (visitedlabelcache.add(labelstate)) {
 							//already visited target label, and re-encountered. it is optimizable
 							if (!isTailOptimizableImpl(lsn.dflt, returntypeframetype, new TreeMap<>(varnumcontents),
 									new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
@@ -361,7 +409,8 @@ public class TailRecursionOptimizer {
 					}
 					if (lsn.labels != null) {
 						for (LabelNode lbl : lsn.labels) {
-							if (visitedlabelcache.add(lbl)) {
+							VisitedLabelState labelstate = new VisitedLabelState(lbl, varnumcontents);
+							if (visitedlabelcache.add(labelstate)) {
 								//already visited target label, and re-encountered. it is optimizable
 								if (!isTailOptimizableImpl(lbl, returntypeframetype, new TreeMap<>(varnumcontents),
 										new HashSet<>(visitedlabelcache), new LinkedList<>(currentstack))) {
@@ -381,6 +430,8 @@ public class TailRecursionOptimizer {
 						case Opcodes.ARETURN:
 						case Opcodes.FRETURN:
 						case Opcodes.IRETURN: {
+							System.out.println(
+									"TailRecursionOptimizer.isTailOptimizableImpl() " + currentstack.peekFirst());
 							if (currentstack.peekFirst() == VarContents.RESULT) {
 								return true;
 							}
@@ -762,6 +813,8 @@ public class TailRecursionOptimizer {
 							if (f == null) {
 								f = VarContents.UNKNOWN;
 							}
+							System.out
+									.println("TailRecursionOptimizer.isTailOptimizableImpl() " + vins.var + " - " + f);
 							varnumcontents.put(vins.var, f);
 							break;
 						}
