@@ -1,8 +1,32 @@
 # jvm-tail-recursion
 
+[![Latest version](https://mirror.nest.saker.build/badges/sipka.jvm.tailrec/version.svg)](https://nest.saker.build/package/sipka.jvm.tailrec "sipka.jvm.tailrec | saker.nest")
+
 Java library performing tail recursion optimizations on Java bytecode. It simply replaces the final recursive method calls in a function to a goto to the start of the same function.
 
 The project uses [ASM](https://asm.ow2.io/) to perform bytecode manipulation.
+
+
+  * [Examples](#examples)
+    + [Count down to zero](#count-down-to-zero)
+    + [List numbers in a string](#list-numbers-in-a-string)
+    + [Enumerate all interfaces that a class implements](#enumerate-all-interfaces-that-a-class-implements)
+    + [Side effect free instruction removal](#side-effect-free-instruction-removal)
+    + [this instance change](#this-instance-change)
+  * [Limitations](#limitations)
+    + [Recommendations](#recommendations)
+  * [Usage](#usage)
+    + [Part of the build process](#part-of-the-build-process)
+      - [ZIP transformer](#zip-transformer)
+      - [Class directory optimization](#class-directory-optimization)
+      - [Optimize an existing archive](#optimize-an-existing-archive)
+    + [Command line usage](#command-line-usage)
+      - [With saker.build](#with-sakerbuild)
+  * [Building the project](#building-the-project)
+  * [Repository structure](#repository-structure)
+  * [Should I use this?](#should-i-use-this)
+  * [License](#license)
+
 
 ## Examples
 
@@ -80,7 +104,7 @@ static String numbers(int n, String s) {
 
 </td></tr></table>
 
-### Enumerate *all* interfaces that a class implements
+### Enumerate all interfaces that a class implements
 
 Tail recursive class can also be optimized inside an if-else condition. Note that here only the recursive call at the end is optimized, not the one in the loop!
 
@@ -180,7 +204,7 @@ final void count(int n) {
 
 Note that this causes some exceptions to not be thrown in case of programming errors. E.g. No `OutOfMemoryError` will be thrown in the optimized code as the `new int[Integer.MAX_INT]` instruction is optimized out, and no `NullPointerException`s are thrown if the `myArray` field is `null`.
 
-### `this` instance change
+### this instance change
 
 The optimization can be performed even if the tail recursive call is done on a different instance: (See limitations)
 
@@ -234,6 +258,7 @@ There are some limitations to the optimization:
     * However, default interface methods **can** be optimized.
 2. Synchronized instance methods cannot be optimized. See the previous point for the reasons.
     * `static` method **can** be synchronized.
+3. If you throw an exception in the method, the stacktrace will only show the method once, as the tail recursive calls are optimized.
 
 ### Recommendations
 
@@ -246,7 +271,7 @@ The methods you want to be subject to optimization should be any of the followin
 ## Usage
 
 The project is released as the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package on the [saker.nest repository](https://nest.saker.build/).\
-You can [**download the latest release using this link**](TODO) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
+You can [**download the latest release using this link**](https://api.nest.saker.build/bundle/download/sipka.jvm.tailrec-v0.8.0) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
 
 It can be used in the following ways:
 
@@ -300,13 +325,13 @@ This will result in a new archive being created that contains everything from th
 
 The optimization can also be performed on the command line:
 
-```shell
+```plaintext
 java -jar sipka.jvm.tailrec.jar -output my_jar_opt.jar my_jar.jar
 ```
 
 The above will optimize `my_jar.jar` and create the output of `my_jar_opt.jar`. You can also overwrite the input:
 
-```shell
+```plaintext
 java -jar sipka.jvm.tailrec.jar -overwrite my_jar.jar
 ```
 
@@ -315,6 +340,53 @@ Which causes the input JAR to be overwritten with the result.
 The input can also be a class directory.
 
 See `--help` for more usage information.
+
+#### With saker.build
+
+If you already have the [saker.build system](https://github.com/sakerbuild/saker.build) at hand, you don't have to bother with downloading. You can use the `main` action of saker.nest to invoke the library:
+
+```plaintext
+java -jar saker.build.jar action main sipka.jvm.tailrec-v0.8.0 --help
+```
+
+## Building the project
+
+The project uses the [saker.build system](https://github.com/sakerbuild/saker.build) for building.
+
+Use the following command, or do build it inside an IDE:
+
+```plaintext
+java -jar saker.build.jar  -build-directory build export
+```
+
+See the [build script](/saker.build) for the executable build targets.
+
+## Repository structure
+
+* `src`: The source files for the project
+    * Sources for the ASM library are under the package `sipka.jvm.tailrec.thirdparty`.
+* `resources`: Resource files for the created JAR files
+* `test/src`: Test Java sources
+* `test/resources`: Resource files for test cases which need them
+
+## Should I use this?
+
+For fun? Definitely. For production? Not so much.\
+In general, when you're writing production code, you'll most likely already optimize your methods in ways that it already avoids issues that are solvable with tail recursion optimization.
+
+My recommendation is that in general you shouldn't rely on a specific optimization being performed for you. They are subject to the circumstances, and can easily break without the intention of breaking it. For example, by not paying attention and accidentally adding a new instruction after the tail recursive call that you want to optimize, will cause the optimization to not be performed. This could cause your code to break unexpectedly.
+
+This project serves mainly educational purposes, and is also fun as you can write infinite loops like this:
+
+```java
+public static void loopForever() {
+    System.out.println("Hello world!");
+    
+    loopForever();
+}
+```
+
+Magnificent!
 
 ## License
 
