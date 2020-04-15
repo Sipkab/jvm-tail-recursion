@@ -371,10 +371,11 @@ See the [build script](/saker.build) for the executable build targets.
 
 ## Should I use this?
 
-For fun? Definitely. For production? Not so much.\
+You should use it, but you **should not** rely on it.\
 In general, when you're writing production code, you'll most likely already optimize your methods in ways that it already avoids issues that are solvable with tail recursion optimization.
 
-My recommendation is that in general you shouldn't rely on a specific optimization being performed for you. They are subject to the circumstances, and can easily break without the intention of breaking it. For example, by not paying attention and accidentally adding a new instruction after the tail recursive call that you want to optimize, will cause the optimization to not be performed. This could cause your code to break unexpectedly.
+My recommendation is that in general you shouldn't rely on a specific optimization being performed for you. They are subject to the circumstances, and can easily break without the intention of breaking it. For example, by not paying attention and accidentally adding a new instruction after the tail recursive call that you want to optimize, will cause the optimization to not be performed. This could cause your code to break unexpectedly. \
+If you want an optimization done for you, you should do it yourself, or be extremely explicit about it. Make sure to add tests for the scenarios that you want to work in a specific way.
 
 This project serves mainly educational purposes, and is also fun as you can write infinite loops like this:
 
