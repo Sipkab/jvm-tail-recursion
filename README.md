@@ -356,7 +356,7 @@ The project uses the [saker.build system](https://github.com/sakerbuild/saker.bu
 Use the following command, or do build it inside an IDE:
 
 ```plaintext
-java -jar saker.build.jar  -build-directory build export
+java -jar saker.build.jar -build-directory build export
 ```
 
 See the [build script](/saker.build) for the executable build targets.

@@ -13,6 +13,7 @@ public class OptimizationImplEdgeCasesTest extends TailRecOptimizerTestCase {
 	@Override
 	public void runTest(Map<String, String> parameters) throws Throwable {
 		optimizeClass(TestMethods.class);
+		assertNotOptimized(TestMethods.class.getMethod("whileStartCount", int.class), 1000000);
 	}
 
 	public static class TestMethods {
@@ -51,7 +52,7 @@ public class OptimizationImplEdgeCasesTest extends TailRecOptimizerTestCase {
 			mixedArguments(i, l, d, b, s);
 		}
 
-		public void mixedInstanceArguments(int i, long l, double d, boolean b, short s) {
+		public final void mixedInstanceArguments(int i, long l, double d, boolean b, short s) {
 			++i;
 			++l;
 			++d;
@@ -60,8 +61,6 @@ public class OptimizationImplEdgeCasesTest extends TailRecOptimizerTestCase {
 			mixedArguments(i, l, d, b, s);
 		}
 
-		//TODO test that this method is NOT optimized at all
-		//TODO create tests that verify that methods that should not be optimized, are actually not optimized
 		public static int whileStartCount(int n) {
 			while (true) {
 				if (n == 0) {

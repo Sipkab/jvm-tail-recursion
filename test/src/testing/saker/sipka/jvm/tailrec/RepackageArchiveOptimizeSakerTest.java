@@ -21,7 +21,6 @@ public class RepackageArchiveOptimizeSakerTest extends NestRepositoryCachingEnvi
 
 	@Override
 	protected void runNestTaskTestImpl() throws Throwable {
-		// TODO Auto-generated method stub
 		CombinedTargetTaskResult res = runScriptTask("build");
 		SakerPath outpath = (SakerPath) res.getTargetTaskResult("secondpath");
 
