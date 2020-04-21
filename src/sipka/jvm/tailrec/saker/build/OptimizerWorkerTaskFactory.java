@@ -48,7 +48,7 @@ public class OptimizerWorkerTaskFactory implements TaskFactory<SakerPath>, Task<
 	public SakerPath run(TaskContext taskcontext) throws Exception {
 		if (saker.build.meta.Versions.VERSION_FULL_COMPOUND >= 8_006) {
 			BuildTrace.classifyTask(BuildTrace.CLASSIFICATION_WORKER);
-			BuildTrace.setDisplayInformation("opt.tailrec", OptimizerTaskFactory.TASK_NAME);
+			BuildTrace.setDisplayInformation("opt.tailrec", OptimizerTaskFactory.TASK_NAME + ":" + input.getFileName());
 		}
 		OptimizerWorkerTaskIdentifier workertaskid = (OptimizerWorkerTaskIdentifier) taskcontext.getTaskId();
 
