@@ -5,7 +5,7 @@ pool:
   vmImage: 'ubuntu-latest'
 
 jobs:
-- job: Export_library
+- job: Build
   steps:
   - script: curl https://api.nest.saker.build/bundle/download/saker.build-v$(curl -s https://mirror.nest.saker.build/badges/saker.build/latest.txt) -o saker.build.jar
     displayName: 'Download saker.build'
