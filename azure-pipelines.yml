@@ -1,0 +1,29 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+jobs:
+- job: Build
+  steps:
+  - script: curl https://api.nest.saker.build/bundle/download/saker.build-v$(curl -s https://mirror.nest.saker.build/badges/saker.build/latest.txt) -o saker.build.jar
+    displayName: 'Download saker.build'
+    
+  - script: java -jar saker.build.jar -bd build -trace pwd://build/build_test.trace test
+    displayName: 'Test'
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    displayName: 'Publish test trace'
+    inputs:
+      pathtoPublish: build/build_test.trace
+      artifactName: trace
+      
+  - script: java -jar saker.build.jar -bd build -trace pwd://build/build_export.trace -trace-artifacts-embed export
+    displayName: 'Export library JAR'
+  - task: PublishBuildArtifacts@1
+    condition: always()
+    displayName: 'Publish export trace'
+    inputs:
+      pathtoPublish: build/build_export.trace
+      artifactName: trace
