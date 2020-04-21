@@ -17,7 +17,7 @@ import saker.build.trace.BuildTrace;
 import saker.nest.scriptinfo.reflection.annot.NestInformation;
 
 @NestInformation(
-		value = "Crates a ZIP resource transformer that performs tail recursion optimization on the Java class files.\n"
+		value = "Creates a ZIP resource transformer that performs tail recursion optimization on Java class files.\n"
 				+ "The output of this task can be used as the Transformer inputs to ZIP archive creation tasks. "
 				+ "(saker.zip.create and related tasks.)")
 public class OptimizerZipTransformerTaskFactory
