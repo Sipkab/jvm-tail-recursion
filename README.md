@@ -346,7 +346,7 @@ See `--help` for more usage information.
 If you already have the [saker.build system](https://github.com/sakerbuild/saker.build) at hand, you don't have to bother with downloading. You can use the `main` action of saker.nest to invoke the library:
 
 ```plaintext
-java -jar saker.build.jar action main sipka.jvm.tailrec-v0.8.0 --help
+java -jar saker.build.jar action main sipka.jvm.tailrec --help
 ```
 
 ## Building the project
