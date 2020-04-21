@@ -430,8 +430,6 @@ public class TailRecursionOptimizer {
 						case Opcodes.ARETURN:
 						case Opcodes.FRETURN:
 						case Opcodes.IRETURN: {
-							System.out.println(
-									"TailRecursionOptimizer.isTailOptimizableImpl() " + currentstack.peekFirst());
 							if (currentstack.peekFirst() == VarContents.RESULT) {
 								return true;
 							}
@@ -813,8 +811,6 @@ public class TailRecursionOptimizer {
 							if (f == null) {
 								f = VarContents.UNKNOWN;
 							}
-							System.out
-									.println("TailRecursionOptimizer.isTailOptimizableImpl() " + vins.var + " - " + f);
 							varnumcontents.put(vins.var, f);
 							break;
 						}
