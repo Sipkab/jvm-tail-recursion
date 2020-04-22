@@ -254,8 +254,7 @@ Note that setting the `this` variable is not valid Java code, but it is possible
 There are some limitations to the optimization:
 
 1. The method must not be virtual. A virtual method is called based on the dynamic type of the object. This means that instance methods which are virtual cannot be optimized, as if the object on which the method is being invoked on changes, the recursive call cannot be simplified to a jump.
-    * This could be improved in the future by analyizing the bytecode and ensuring that the recursive call can only be made on `this`.
-    * However, default interface methods **can** be optimized.
+    * Another reason is why virtual methods cannot be optimized is that they can be called from the subclass using the `super.method(...)` expression. If a subclass calls the method then the tail recursive calls would need to be dispatched back to the subclass. This causes virtual methods to not be optimizable.
 2. Synchronized instance methods cannot be optimized. See the previous point for the reasons.
     * `static` method **can** be synchronized.
 3. If you throw an exception in the method, the stacktrace will only show the method once, as the tail recursive calls are optimized.
@@ -271,7 +270,7 @@ The methods you want to be subject to optimization should be any of the followin
 ## Usage
 
 The project is released as the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package on the [saker.nest repository](https://nest.saker.build/).\
-You can [**download the latest release using this link**](https://api.nest.saker.build/bundle/download/sipka.jvm.tailrec-v0.8.0) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
+You can [**download the latest release using this link**](https://api.nest.saker.build/bundle/download/sipka.jvm.tailrec-v0.8.1) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
 
 It can be used in the following ways:
 

@@ -9,7 +9,9 @@ public class InterfaceDefaultMethodTest extends TailRecOptimizerTestCase {
 	@Override
 	public void runTest(Map<String, String> parameters) throws Throwable {
 		optimizeClass(TestMethods.class);
-		assertSuccessfulOptimization(Impl.class, "count", new Class<?>[] { int.class }, 10000000);
+		Class<?> optimizedimpl = optimizeClass(Impl.class);
+		assertInvocationException(StackOverflowError.class, () -> optimizedimpl.getMethod("count", int.class)
+				.invoke(optimizedimpl.getConstructor().newInstance(), 100000));
 	}
 
 	public static interface TestMethods {

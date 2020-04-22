@@ -868,9 +868,9 @@ public class TailRecursionOptimizer {
 		//        in this case if we optimize the recursive call, no semantic changes occurr
 		//        as the unmatched monitorenter would not be exited anyway even if we don't optimize.
 
-		//TODO virtual methods could still be optimizable if we keep track of the this reference in the variables
-		//     and on the stack. if we can be sure that the recursive call is always made on this, then
-		//     the method could be optimized
+		//Virtual methods cannot be optimized.
+		//   we can't optimize them, because subclasses can call these methods. the recursive
+		//   calls would dispatch back to the subclass, so the optimization cannot be performed.
 
 		int access = mn.access;
 		if (((access & Opcodes.ACC_NATIVE) == Opcodes.ACC_NATIVE)
@@ -888,16 +888,12 @@ public class TailRecursionOptimizer {
 				|| (access & Opcodes.ACC_FINAL) == Opcodes.ACC_FINAL) {
 			if (((access & Opcodes.ACC_SYNCHRONIZED) == Opcodes.ACC_SYNCHRONIZED)) {
 				//synchronized instance methods are not optimizable
+
+				//TODO they could be optimizable if we keep track of the object reference
+				//     and make sure it is called on this
 				return false;
 			}
 			return true;
-		}
-		if (owneritf) {
-			if (((access & Opcodes.ACC_ABSTRACT) != Opcodes.ACC_ABSTRACT)) {
-				//a non-abstract interface method, i.e. default method
-				//it can be optimized with invokespecial
-				return true;
-			}
 		}
 		return false;
 	}

@@ -138,6 +138,11 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 
 	private static <T extends Throwable> T assertOptimizationException(Class<T> exceptionclass,
 			ExceptionAssertion runner) {
+		return assertInvocationException(exceptionclass, runner);
+	}
+
+	protected static <T extends Throwable> T assertInvocationException(Class<T> exceptionclass,
+			ExceptionAssertion runner) throws AssertionError {
 		return assertException(exceptionclass, () -> {
 			try {
 				runner.run();
