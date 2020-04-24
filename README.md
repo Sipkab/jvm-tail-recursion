@@ -373,6 +373,7 @@ Benchmark                            Mode  Cnt        Score      Error  Units
 TailRecursionBenchmark.countTest    thrpt   25   257429,802 ? 1501,296  ops/s
 TailRecursionBenchmark.factTest     thrpt   25   831008,693 ? 9108,785  ops/s
 TailRecursionBenchmark.numbersTest  thrpt   25     2083,716 ?   14,563  ops/s
+```
 
 ## Building the project
 
