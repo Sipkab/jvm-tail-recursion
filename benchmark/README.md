@@ -18,7 +18,7 @@ java -jar build\saker.jar.create\benchmark-unoptimized.jar
 
 ## Results
 
-These are our benchmark results. See the [benchmarked class](/benchmark/sipka/jvm/tailrec/TailRecursionBenchmark.java) for information about the cases.
+These are our benchmark results. See the [benchmarked class](src/benchmark/sipka/jvm/tailrec/TailRecursionBenchmark.java) for information about the cases.
 
 **Higher values are better.**
 
