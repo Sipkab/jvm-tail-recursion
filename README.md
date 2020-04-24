@@ -355,7 +355,7 @@ java -jar saker.build.jar action main sipka.jvm.tailrec --help
 
 Our results are the following: (**Higher values are better**)
 
-See the [benchmark](/benchmarks) directory for more information.
+See the [benchmark](/benchmark) directory for more information.
 
 ### Optimized
 
