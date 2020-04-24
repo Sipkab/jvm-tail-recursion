@@ -153,8 +153,12 @@ public class MainCommand {
 
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+				Path outputpath = output.resolve(input.relativize(file));
 				if (file.getFileName().toString().endsWith(".class")) {
-					optimizeClassFile(file, output.resolve(input.relativize(file)));
+					optimizeClassFile(file, outputpath);
+				}else {
+					Files.createDirectories(outputpath.getParent());
+					Files.copy(file, outputpath, copyOptions);
 				}
 				return FileVisitResult.CONTINUE;
 			}

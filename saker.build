@@ -1,4 +1,4 @@
-global(VERSION_sipka.jvm.tailrec) = "0.8.1"
+global(VERSION_sipka.jvm.tailrec) = "0.8.2"
 
 static(VERSION_saker.build) = nest.dependency.resolve(
 	saker.build,

@@ -10,6 +10,7 @@ import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+import saker.build.file.DelegateSakerFile;
 import saker.build.file.SakerDirectory;
 import saker.build.file.SakerFile;
 import saker.build.file.content.ContentDescriptor;
@@ -20,7 +21,7 @@ import saker.build.task.CommonTaskContentDescriptors;
 import saker.build.task.Task;
 import saker.build.task.TaskContext;
 import saker.build.task.TaskFactory;
-import saker.build.task.utils.dependencies.RecursiveIgnoreCaseExtensionFileCollectionStrategy;
+import saker.build.task.utils.dependencies.RecursiveFileCollectionStrategy;
 import saker.build.thirdparty.saker.util.io.SerialUtils;
 import saker.build.trace.BuildTrace;
 
@@ -53,8 +54,7 @@ public class OptimizerWorkerTaskFactory implements TaskFactory<SakerPath>, Task<
 		OptimizerWorkerTaskIdentifier workertaskid = (OptimizerWorkerTaskIdentifier) taskcontext.getTaskId();
 
 		NavigableMap<SakerPath, SakerFile> inputfiles = taskcontext.getTaskUtilities()
-				.collectFilesReportInputFileAndAdditionDependency(null,
-						RecursiveIgnoreCaseExtensionFileCollectionStrategy.create(input, ".class"));
+				.collectFilesReportInputFileAndAdditionDependency(null, RecursiveFileCollectionStrategy.create(input));
 		if (inputfiles.isEmpty()) {
 			//check that it is a directory. if not, throw an appropriate exception
 			SakerFile inputfile = taskcontext.getTaskUtilities().resolveAtPath(input);
@@ -81,9 +81,20 @@ public class OptimizerWorkerTaskFactory implements TaskFactory<SakerPath>, Task<
 		//TODO make incremental (although the directory synchronization provides necessary incrementality)
 		outputbuilddir.clear();
 		for (Entry<SakerPath, SakerFile> entry : relativeinputfiles.entrySet()) {
+			SakerFile f = entry.getValue();
+			if (f instanceof SakerDirectory) {
+				//just resolve the path to have the directory created
+				taskcontext.getTaskUtilities().resolveDirectoryAtRelativePathCreate(outputbuilddir, entry.getKey());
+				continue;
+			}
 			SakerDirectory outdir = taskcontext.getTaskUtilities().resolveDirectoryAtRelativePathCreate(outputbuilddir,
 					entry.getKey().getParent());
-			OptimizedSakerFile outfile = new OptimizedSakerFile(entry.getValue());
+			SakerFile outfile;
+			if (f.getName().endsWith(".class")) {
+				outfile = new OptimizedSakerFile(f);
+			} else {
+				outfile = new DelegateSakerFile(f);
+			}
 			outdir.add(outfile);
 			outputcontents.put(outputdirpath.resolve(entry.getKey()), outfile.getContentDescriptor());
 		}

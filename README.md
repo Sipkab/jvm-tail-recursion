@@ -22,6 +22,9 @@ The project uses [ASM](https://asm.ow2.io/) to perform bytecode manipulation.
       - [Optimize an existing archive](#optimize-an-existing-archive)
     + [Command line usage](#command-line-usage)
       - [With saker.build](#with-sakerbuild)
+  * [Benchmarks](#benchmarks)
+    + [Optimized](#optimized)
+    + [Unoptimized](#unoptimized)
   * [Building the project](#building-the-project)
   * [Repository structure](#repository-structure)
   * [Should I use this?](#should-i-use-this)
@@ -347,6 +350,29 @@ If you already have the [saker.build system](https://github.com/sakerbuild/saker
 ```plaintext
 java -jar saker.build.jar action main sipka.jvm.tailrec --help
 ```
+
+## Benchmarks
+
+Our results are the following: (**Higher values are better**)
+
+See the [benchmark](/benchmarks) directory for more information.
+
+### Optimized
+
+```plaintext
+Benchmark                            Mode  Cnt        Score      Error  Units
+TailRecursionBenchmark.countTest    thrpt   25   436354,616 ? 2208,882  ops/s
+TailRecursionBenchmark.factTest     thrpt   25  1201126,490 ? 8081,594  ops/s
+TailRecursionBenchmark.numbersTest  thrpt   25     2183,977 ?   62,684  ops/s
+```
+
+### Unoptimized
+
+```plaintext
+Benchmark                            Mode  Cnt        Score      Error  Units
+TailRecursionBenchmark.countTest    thrpt   25   257429,802 ? 1501,296  ops/s
+TailRecursionBenchmark.factTest     thrpt   25   831008,693 ? 9108,785  ops/s
+TailRecursionBenchmark.numbersTest  thrpt   25     2083,716 ?   14,563  ops/s
 
 ## Building the project
 

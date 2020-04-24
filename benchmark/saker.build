@@ -1,0 +1,59 @@
+static(JMH_DEPS) = saker.maven.resolve([
+	"org.openjdk.jmh:jmh-core:jar:1.23"
+])
+compile(
+	out javac
+){
+	$javac = saker.java.compile(
+		src
+		ClassPath: saker.maven.classpath(static(JMH_DEPS))
+		AnnotationProcessors: [
+			saker.java.processor(
+				ClassPath: saker.maven.classpath(saker.maven.resolve(
+					"org.openjdk.jmh:jmh-generator-annprocess:jar:1.23"
+				))
+				Class: org.openjdk.jmh.generators.BenchmarkProcessor
+			)
+		]
+		Identifier: benchmark
+	)
+}
+export(
+	in compile = include(compile),
+){
+	$javac = $compile[javac]
+	include(_export_jar, name: benchmark-unoptimized.jar, classdir: $javac[ClassDirectory])
+	include(
+		_export_jar, 
+		name: benchmark-optimized.jar, 
+		classdir: sipka.jvm.tailrec.optimize($javac[ClassDirectory]),
+	)
+}
+
+_export_jar(
+	in name,
+	in classdir,
+	
+	out jar,
+) {
+	$jar = saker.jar.create(
+		Output: $name,
+		Includes: foreach $apath in saker.maven.download(static(JMH_DEPS))[ArtifactPaths] : [
+			{
+				Archive: $apath
+				Resources: **/*.class
+			}
+		]
+		Resources: [
+			{
+				Directory: $classdir
+				Resources: **
+			}
+		]
+		Manifest: {
+			MainAttributes: {
+				Main-Class: org.openjdk.jmh.Main
+			}
+		}
+	)
+}
