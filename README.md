@@ -273,7 +273,7 @@ The methods you want to be subject to optimization should be any of the followin
 ## Usage
 
 The project is released as the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package on the [saker.nest repository](https://nest.saker.build/).\
-You can [**download the latest release using this link**](https://api.nest.saker.build/bundle/download/sipka.jvm.tailrec-v0.8.1) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
+You can [**download the latest release using this link**](https://api.nest.saker.build/bundle/download/sipka.jvm.tailrec-v0.8.2) or by selecting a version and clicking *Download* on the *Bundles* tab on the [sipka.jvm.tailrec](https://nest.saker.build/package/sipka.jvm.tailrec?tab=bundles) package page.
 
 It can be used in the following ways:
 
