@@ -13,7 +13,7 @@ public class BeforeTryCatchTest extends TailRecOptimizerTestCase {
 	}
 
 	public static class TestMethods {
-		public static void trying(int n) {
+		public static void trying(int n) throws Throwable {
 			if (n != 0) {
 				trying(n - 1);
 				return;

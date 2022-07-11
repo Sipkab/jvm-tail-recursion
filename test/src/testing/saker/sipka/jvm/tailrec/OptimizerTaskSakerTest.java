@@ -43,13 +43,19 @@ public class OptimizerTaskSakerTest extends NestRepositoryCachingEnvironmentTest
 	}
 
 	private void testOptimization(SakerPath outpath) throws Throwable {
-		try (ClassLoaderDataFinder finder = new SakerPathClassLoaderDataFinder(files, outpath)) {
+		ClassLoaderDataFinder finder = null;
+		try {
+			finder = new SakerPathClassLoaderDataFinder(files, outpath);
 			MultiDataClassLoader cl = new MultiDataClassLoader(finder);
 			Class<?> c = Class.forName("test.Main", false, cl);
 			//this should succeed, as it was optimized
 			c.getMethod("count", int.class).invoke(null, 10000000);
 		} catch (InvocationTargetException e) {
 			throw e.getCause();
+		} finally {
+			if (finder != null) {
+				finder.close();
+			}
 		}
 	}
 

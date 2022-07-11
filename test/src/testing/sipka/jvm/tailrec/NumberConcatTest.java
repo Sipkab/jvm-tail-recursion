@@ -9,7 +9,7 @@ public class NumberConcatTest extends TailRecOptimizerTestCase {
 
 	@Override
 	public void runTest(Map<String, String> parameters) throws Throwable {
-		assertSuccessfulOptimization(TestMethods.class.getMethod("numbers", int.class, String.class), 10000, "");
+		assertSuccessfulOptimization(TestMethods.class.getMethod("numbers", int.class, String.class), 20000, "");
 	}
 
 	public static class TestMethods {

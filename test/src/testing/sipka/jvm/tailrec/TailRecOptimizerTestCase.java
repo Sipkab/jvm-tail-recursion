@@ -27,16 +27,30 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 	}
 
 	private static byte[] getResourceBytes(ClassLoader cl, String resourcename) {
-		try (InputStream is = cl.getResourceAsStream(resourcename)) {
-			if (is == null) {
-				return null;
-			}
-			try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-				byte[] buffer = new byte[2048];
-				for (int read; (read = is.read(buffer)) > 0;) {
-					baos.write(buffer, 0, read);
+		InputStream is = null;
+		try {
+			try {
+				is = cl.getResourceAsStream(resourcename);
+				if (is == null) {
+					return null;
 				}
-				return baos.toByteArray();
+				ByteArrayOutputStream baos = null;
+				try {
+					baos = new ByteArrayOutputStream();
+					byte[] buffer = new byte[2048];
+					for (int read; (read = is.read(buffer)) > 0;) {
+						baos.write(buffer, 0, read);
+					}
+					return baos.toByteArray();
+				} finally {
+					if (baos != null) {
+						baos.close();
+					}
+				}
+			} finally {
+				if (is != null) {
+					is.close();
+				}
 			}
 		} catch (IOException e) {
 		}
@@ -61,7 +75,7 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 		assertEquals(unoptresult, optresult);
 	}
 
-	public void assertNotOptimized(Method unoptimizedmethod, Object... args) throws Throwable {
+	public void assertNotOptimized(final Method unoptimizedmethod, final Object... args) throws Throwable {
 		Class<?> optimizedclass = optimizeClass(unoptimizedmethod.getDeclaringClass());
 		Class<?>[] paramtypes = unoptimizedmethod.getParameterTypes();
 		for (int i = 0; i < paramtypes.length; i++) {
@@ -69,11 +83,19 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 				paramtypes[i] = Class.forName(paramtypes[i].getName(), false, definingClassLoader);
 			}
 		}
-		Method optimizedmethod = optimizedclass.getMethod(unoptimizedmethod.getName(), paramtypes);
-		assertOptimizationException(StackOverflowError.class,
-				() -> unoptimizedmethod.invoke(createMethodCallArgument(unoptimizedmethod), args));
-		assertOptimizationException(StackOverflowError.class,
-				() -> optimizedmethod.invoke(createMethodCallArgument(optimizedmethod), args));
+		final Method optimizedmethod = optimizedclass.getMethod(unoptimizedmethod.getName(), paramtypes);
+		assertOptimizationException(StackOverflowError.class, new ExceptionAssertion() {
+			@Override
+			public void run() throws Throwable {
+				unoptimizedmethod.invoke(createMethodCallArgument(unoptimizedmethod), args);
+			}
+		});
+		assertOptimizationException(StackOverflowError.class, new ExceptionAssertion() {
+			@Override
+			public void run() throws Throwable {
+				optimizedmethod.invoke(createMethodCallArgument(optimizedmethod), args);
+			}
+		});
 	}
 
 	public void assertSuccessfulOptimization(Method unoptimizedmethod, Object... args) throws Throwable {
@@ -129,10 +151,15 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 				expectedexceptiontype, args);
 	}
 
-	private static void assertSuccessfulMethodsOptimizationWithException(Object unoptarg, Method unoptimized,
-			Object optarg, Method optimized, Class<? extends Throwable> expectedexceptiontype, Object... args)
+	private static void assertSuccessfulMethodsOptimizationWithException(final Object unoptarg, final Method unoptimized,
+			Object optarg, Method optimized, Class<? extends Throwable> expectedexceptiontype, final Object... args)
 			throws IllegalAccessException, InvocationTargetException {
-		assertOptimizationException(expectedexceptiontype, () -> unoptimized.invoke(unoptarg, args));
+		assertOptimizationException(expectedexceptiontype, new ExceptionAssertion() {
+			@Override
+			public void run() throws Throwable {
+				unoptimized.invoke(unoptarg, args);
+			}
+		});
 		optimized.invoke(optarg, args);
 	}
 
@@ -142,12 +169,15 @@ public abstract class TailRecOptimizerTestCase extends SakerTestCase {
 	}
 
 	protected static <T extends Throwable> T assertInvocationException(Class<T> exceptionclass,
-			ExceptionAssertion runner) throws AssertionError {
-		return assertException(exceptionclass, () -> {
-			try {
-				runner.run();
-			} catch (InvocationTargetException e) {
-				throw e.getCause();
+			final ExceptionAssertion runner) throws AssertionError {
+		return assertException(exceptionclass, new ExceptionAssertion() {
+			@Override
+			public void run() throws Throwable {
+				try {
+					runner.run();
+				} catch (InvocationTargetException e) {
+					throw e.getCause();
+				}
 			}
 		});
 	}

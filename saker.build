@@ -9,7 +9,14 @@ static(VERSION_saker.nest) = nest.dependency.resolve(
 	Filters: nest.dependency.filter.kind([]),
 )[Bundles][0][BundleIdentifier][VersionNumber]
 
-static(VERSION_sipka.cmdline) = "0.8.0"
+static(VERSION_sipka.cmdline) = "0.8.3"
+
+static(TEST_COMPILER_OPTIONS) = [
+	{
+		Identifier: jdk8,
+		SourceDirectories: test/src-jdk8/
+	}
+]
 
 compile(
 	out javac
@@ -117,9 +124,22 @@ upload(){
 		Overwrite: true,
 	)
 }
-test(){
+test_on_jdk(
+	in jdk_version = 8,
+	
+	out export
+	out compile,
+	out testcompile,
+	out instrumentedjar,
+) {
 	$export = include(export)
 	$compile = $export[compile]
+	
+	$instrumentedjar = nest.test.instrument(
+		nest.bundle.download("saker.build-test-v{ static(VERSION_saker.build) }")[BundlePaths][0],
+		NestVersion: static(VERSION_saker.nest),
+	)
+	
 	$testcompile = saker.java.compile(
 		SourceDirectories: test/src/,
 		ClassPath: [
@@ -131,7 +151,10 @@ test(){
 			]),
 			$instrumentedjar
 		],
-		Identifier: tests,
+		SourceVersion: "RELEASE_{$jdk_version}",
+		TargetVersion: "RELEASE_{$jdk_version}",
+		Identifier: "tests-jdk{$jdk_version}",
+		CompilerOptions: static(TEST_COMPILER_OPTIONS)
 	)
 	
 	saker.java.test(
@@ -159,12 +182,20 @@ test(){
 		AbortOnFail: true,
 		Verbose: true,
 	)
+}
+
+test() {
+	test_on_jdk(jdk_version: 5)
+	test_on_jdk(jdk_version: 6)
+	test_on_jdk(jdk_version: 7)
 	
+	# use results from jdk 8 test for saker.build task tests
+	$jdk8test = test_on_jdk(jdk_version: 8)
 	
-	$instrumentedjar = nest.test.instrument(
-		nest.bundle.download("saker.build-test-v{ static(VERSION_saker.build) }")[BundlePaths][0],
-		NestVersion: static(VERSION_saker.nest),
-	)
+	$testcompile = $jdk8test[testcompile]
+	$compile = $jdk8test[compile]
+	$export = $jdk8test[export]
+	$instrumentedjar = $jdk8test[instrumentedjar]
 	
 	$resolveddependencies = nest.dependency.resolve(
 		Bundles: [saker.zip, saker.java.compiler, saker.jar],

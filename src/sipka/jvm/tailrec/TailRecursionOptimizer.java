@@ -101,8 +101,8 @@ public class TailRecursionOptimizer {
 		cr.accept(cn, ClassReader.EXPAND_FRAMES);
 		boolean optimized = false;
 		for (MethodNode mn : cn.methods) {
-			boolean methodoptimized = optimizeMethod(cn.name,
-					((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE), mn);
+			boolean methodoptimized = optimizeMethod(cn, ((cn.access & Opcodes.ACC_INTERFACE) == Opcodes.ACC_INTERFACE),
+					mn);
 			optimized = optimized || methodoptimized;
 		}
 		if (!optimized) {
@@ -236,7 +236,7 @@ public class TailRecursionOptimizer {
 								//already visited target label, and re-encountered. it is optimizable
 								return true;
 							}
-							ins = jmp.label.getNext();
+							ins = jmp.label; // .getNext() is called as part of the for loop
 							break;
 						}
 						case Opcodes.IFNULL:
@@ -919,12 +919,12 @@ public class TailRecursionOptimizer {
 		return false;
 	}
 
-	private static LabelNode insertStartGotoLabel(MethodNode mn) {
-		AbstractInsnNode firstinst = mn.instructions.getFirst();
+	private static LabelNode insertStartGotoLabel(ClassNode classnode, MethodNode mn) {
+		AbstractInsnNode firstinsn = mn.instructions.getFirst();
 		LabelNode firstlabel = null;
 		FrameNode firstframe = null;
 
-		for (AbstractInsnNode n = firstinst; (firstlabel == null || firstframe == null) && n != null;) {
+		for (AbstractInsnNode n = firstinsn; (firstlabel == null || firstframe == null) && n != null;) {
 			if (isInstructionNodeType(n.getType())) {
 				break;
 			}
@@ -947,14 +947,15 @@ public class TailRecursionOptimizer {
 		}
 
 		if (firstframe == null) {
-			//XXX is using F_SAME here when EXPAND_FRAMES is used okay?
-			firstframe = new FrameNode(Opcodes.F_SAME, 0, null, 0, null);
-			mn.instructions.insert(firstlabel, firstframe);
+			if (isUsingFrames(classnode)) {
+				firstframe = new FrameNode(Opcodes.F_SAME, 0, null, 0, null);
+				mn.instructions.insert(firstlabel, firstframe);
+			}
 		}
 		return firstlabel;
 	}
 
-	private static boolean optimizeMethod(String methodowner, boolean owneritf, MethodNode mn) {
+	private static boolean optimizeMethod(ClassNode classnode, boolean owneritf, MethodNode mn) {
 		if ("<init>".equals(mn.name) || "<clinit>".equals(mn.name)) {
 			//no optimizations for constructors and static initializers
 			return false;
@@ -1022,6 +1023,8 @@ public class TailRecursionOptimizer {
 			}
 		}
 
+		boolean usingframes = isUsingFrames(classnode);
+
 		for (AbstractInsnNode ins = mn.instructions.getFirst(); ins != null; ins = ins.getNext()) {
 			if (trycatchskipinstructions.contains(ins)) {
 				continue;
@@ -1029,12 +1032,12 @@ public class TailRecursionOptimizer {
 			int instype = ins.getType();
 			if (instype == AbstractInsnNode.METHOD_INSN) {
 				MethodInsnNode mins = (MethodInsnNode) ins;
-				if (methodowner.equals(mins.owner) && mn.name.equals(mins.name) && mn.desc.equals(mins.desc)
+				if (classnode.name.equals(mins.owner) && mn.name.equals(mins.name) && mn.desc.equals(mins.desc)
 						&& owneritf == mins.itf) {
 					boolean optimizablecall = isTailOptimizable(mins, returntypeframetype, mins);
 					if (optimizablecall) {
 						if (gotolabelnode == null) {
-							gotolabelnode = insertStartGotoLabel(mn);
+							gotolabelnode = insertStartGotoLabel(classnode, mn);
 						}
 						JumpInsnNode gotojumpnode = new JumpInsnNode(Opcodes.GOTO, gotolabelnode);
 
@@ -1043,16 +1046,25 @@ public class TailRecursionOptimizer {
 						//remove the method call instruction
 						mn.instructions.remove(mins);
 
-						AbstractInsnNode nextframe = null;
+						//the first instruction of the section that is reachable by other jump instructions
+						//this is a frame instruction if we're using frames in this class version
+						//or a label node that is possibly a target of another jump instruction
+						AbstractInsnNode nextsection = null;
 						remover:
 						for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
 							int ntype = n.getType();
 							switch (ntype) {
 								case AbstractInsnNode.FRAME: {
-									nextframe = n;
+									nextsection = n;
 									break remover;
 								}
-								case AbstractInsnNode.LABEL:
+								case AbstractInsnNode.LABEL: {
+									if (!usingframes) {
+										nextsection = n;
+										break remover;
+									}
+									break;
+								}
 								case AbstractInsnNode.LINE: {
 									break;
 								}
@@ -1080,7 +1092,7 @@ public class TailRecursionOptimizer {
 							}
 							n = n.getNext();
 						}
-						if (nextframe == null) {
+						if (nextsection == null) {
 							//remove every next node after the goto, as there are no more instructions
 							for (AbstractInsnNode n = gotojumpnode.getNext(); n != null;) {
 								AbstractInsnNode next = n.getNext();
@@ -1156,6 +1168,10 @@ public class TailRecursionOptimizer {
 			return true;
 		}
 		return false;
+	}
+
+	private static boolean isUsingFrames(ClassNode classnode) {
+		return (classnode.version & 0xFFFF) > Opcodes.V1_5;
 	}
 
 	private static boolean isLabelsNextToEachOther(LabelNode first, LabelNode second) {

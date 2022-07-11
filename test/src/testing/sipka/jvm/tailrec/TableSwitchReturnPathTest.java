@@ -8,7 +8,6 @@ import testing.saker.SakerTest;
 public class TableSwitchReturnPathTest extends TailRecOptimizerTestCase {
 	@Override
 	public void runTest(Map<String, String> parameters) throws Throwable {
-		//the getfield instruction has been optimized away
 		assertSuccessfulOptimization(TestMethods.class.getMethod("count", int.class, int.class), 10000000, 10);
 	}
 

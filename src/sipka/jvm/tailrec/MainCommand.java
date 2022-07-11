@@ -156,7 +156,7 @@ public class MainCommand {
 				Path outputpath = output.resolve(input.relativize(file));
 				if (file.getFileName().toString().endsWith(".class")) {
 					optimizeClassFile(file, outputpath);
-				}else {
+				} else {
 					Files.createDirectories(outputpath.getParent());
 					Files.copy(file, outputpath, copyOptions);
 				}
@@ -288,7 +288,18 @@ public class MainCommand {
 		return buffer.toByteArray();
 	}
 
-	public static Path toPath(Iterator<? extends String> it) {
+	/**
+	 * Convers the given argument to a {@link Path}.
+	 * <p>
+	 * Called by the command line argument parser framework.
+	 * 
+	 * @param paramname
+	 *            The name of the parameter.
+	 * @param it
+	 *            The parameter iterator.
+	 * @return The converted {@link Path}.
+	 */
+	public static Path toPath(String paramname, Iterator<? extends String> it) {
 		return Paths.get(it.next());
 	}
 }
